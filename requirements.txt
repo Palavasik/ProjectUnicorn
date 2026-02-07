@@ -1,0 +1,29 @@
+# Telegram Bot Framework
+python-telegram-bot==20.7
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Database (раскомментируйте нужное)
+# SQLite (встроен в Python)
+# PostgreSQL
+# psycopg2-binary==2.9.9
+# SQLAlchemy==2.0.23
+
+# Redis (опционально)
+# redis==5.0.1
+
+# HTTP requests (если нужны внешние API)
+# requests==2.31.0
+
+# Logging (расширенное)
+# loguru==0.7.2
+
+# Testing
+# pytest==7.4.3
+# pytest-asyncio==0.21.1
+
+# Code quality
+# black==23.11.0
+# flake8==6.1.0
+# mypy==1.7.0

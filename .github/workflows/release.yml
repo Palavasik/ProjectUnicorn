@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Триггер при создании тега, начинающегося с 'v'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Полная история для генерации changelog
+      
+      - name: Get version from tag
+        id: tag_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.tag_version.outputs.VERSION }}
+          body: |
+            ## 🎉 Релиз версии ${{ steps.tag_version.outputs.VERSION }}
+            
+            Автоматически созданный релиз.
+            
+            ### 📝 Изменения
+            См. коммиты между тегами для деталей.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
