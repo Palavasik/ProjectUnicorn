@@ -3,12 +3,10 @@
 Точка входа для запуска бота.
 """
 
-import asyncio
 import logging
-import os
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application
 
 from bot.bot import Bot
 from config.settings import Settings
@@ -24,26 +22,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def main():
+def main():
     """Основная функция запуска бота."""
-    # Загрузка настроек
     settings = Settings()
-    
+
     if not settings.bot_token:
         logger.error("BOT_TOKEN не найден в переменных окружения!")
         return
-    
-    # Создание приложения
+
     application = Application.builder().token(settings.bot_token).build()
-    
-    # Инициализация бота
     bot = Bot(application)
     bot.setup_handlers()
-    
-    # Запуск бота
+
     logger.info("Бот запущен...")
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()

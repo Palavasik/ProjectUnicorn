@@ -1,0 +1,152 @@
+[
+  {
+    "id": "msk-gorky-1",
+    "city": "Москва",
+    "name": "Парк Горького — Нескучный сад",
+    "distance_km": 6.0,
+    "surface_type": "park",
+    "description": "Классический маршрут по главному парку Москвы. Ухоженные дорожки, зелёные аллеи, минимум машин.",
+    "features": ["освещение", "много людей", "без плитки", "ровный рельеф"],
+    "map_link": "https://www.openstreetmap.org/relation/123456"
+  },
+  {
+    "id": "msk-gorky-2",
+    "city": "Москва",
+    "name": "Парк Горького — Воробьёвы горы",
+    "distance_km": 8.5,
+    "surface_type": "park",
+    "description": "Продолжение от Парка Горького до Воробьёвых гор. Смешанный рельеф, виды на Москву.",
+    "features": ["освещение", "средняя людность", "подъёмы"],
+    "map_link": "https://www.openstreetmap.org/relation/123457"
+  },
+  {
+    "id": "msk-sokolniki",
+    "city": "Москва",
+    "name": "Парк Сокольники",
+    "distance_km": 5.0,
+    "surface_type": "park",
+    "description": "Большой парк с множеством аллей. Можно составить маршрут от 3 до 10 км.",
+    "features": ["освещение", "мало людей в глубине парка", "ровный рельеф"],
+    "map_link": "https://www.openstreetmap.org/relation/123458"
+  },
+  {
+    "id": "msk-sokolniki-long",
+    "city": "Москва",
+    "name": "Сокольники — круг по периметру",
+    "distance_km": 10.0,
+    "surface_type": "park",
+    "description": "Полный круг по периметру парка Сокольники. Асфальтовые и грунтовые дорожки.",
+    "features": ["освещение", "мало людей", "без плитки"],
+    "map_link": "https://www.openstreetmap.org/relation/123459"
+  },
+  {
+    "id": "msk-embankment",
+    "city": "Москва",
+    "name": "Набережная Москвы-реки (Парк Победы — Хамовники)",
+    "distance_km": 12.0,
+    "surface_type": "embankment",
+    "description": "Длинная набережная вдоль реки. Ровный асфальт, мало светофоров, красивые виды.",
+    "features": ["освещение", "средняя людность", "ровный рельеф", "длинный отрезок"],
+    "map_link": "https://www.openstreetmap.org/relation/123460"
+  },
+  {
+    "id": "msk-embankment-short",
+    "city": "Москва",
+    "name": "Крымская набережная — круг",
+    "distance_km": 5.5,
+    "surface_type": "embankment",
+    "description": "Компактный маршрут по Крымской набережной и парку «Музеон». Идеально для короткой пробежки.",
+    "features": ["освещение", "много людей", "ровный рельеф"],
+    "map_link": "https://www.openstreetmap.org/relation/123461"
+  },
+  {
+    "id": "msk-losiny",
+    "city": "Москва",
+    "name": "Лосиный остров — лесные тропы",
+    "distance_km": 10.0,
+    "surface_type": "trail",
+    "description": "Настоящий трейл в черте города. Грунтовые тропы, корни, подъёмы. Природа и тишина.",
+    "features": ["слабое освещение", "мало людей", "пересечённая местность"],
+    "map_link": "https://www.openstreetmap.org/relation/123462"
+  },
+  {
+    "id": "msk-losiny-short",
+    "city": "Москва",
+    "name": "Лосиный остров — короткий круг",
+    "distance_km": 6.0,
+    "surface_type": "trail",
+    "description": "Укороченный вариант по Лосиному острову. Грунт и гравий, меньше корней.",
+    "features": ["слабое освещение", "мало людей", "лёгкий трейл"],
+    "map_link": "https://www.openstreetmap.org/relation/123463"
+  },
+  {
+    "id": "msk-vorobyovy",
+    "city": "Москва",
+    "name": "Воробьёвы горы — Университет",
+    "distance_km": 7.0,
+    "surface_type": "asphalt",
+    "description": "Асфальтовые дорожки на Воробьёвых горах. Подъёмы и спуски, виды на город.",
+    "features": ["освещение", "средняя людность", "рельеф с подъёмами"],
+    "map_link": "https://www.openstreetmap.org/relation/123464"
+  },
+  {
+    "id": "msk-izmailovo",
+    "city": "Москва",
+    "name": "Измайловский парк",
+    "distance_km": 8.0,
+    "surface_type": "park",
+    "description": "Один из крупнейших парков Москвы. Широкие аллеи, можно бегать долго без повторений.",
+    "features": ["освещение", "мало людей", "ровный рельеф"],
+    "map_link": "https://www.openstreetmap.org/relation/123465"
+  },
+  {
+    "id": "spb-summer-garden",
+    "city": "Санкт-Петербург",
+    "name": "Летний сад — набережная Невы",
+    "distance_km": 5.0,
+    "surface_type": "embankment",
+    "description": "Классический маршрут вдоль Невы. Брусчатка и асфальт, исторический центр.",
+    "features": ["освещение", "много людей", "красивые виды"],
+    "map_link": "https://www.openstreetmap.org/relation/123466"
+  },
+  {
+    "id": "spb-primorsky",
+    "city": "Санкт-Петербург",
+    "name": "Приморский парк Победы",
+    "distance_km": 7.0,
+    "surface_type": "park",
+    "description": "Большой парк у залива. Асфальтовые дорожки, можно составить маршрут разной длины.",
+    "features": ["освещение", "средняя людность", "ровный рельеф"],
+    "map_link": "https://www.openstreetmap.org/relation/123467"
+  },
+  {
+    "id": "spb-elagin",
+    "city": "Санкт-Петербург",
+    "name": "Елагин остров",
+    "distance_km": 6.0,
+    "surface_type": "park",
+    "description": "Остров-парк с ухоженными дорожками. Круг по периметру около 5–6 км.",
+    "features": ["освещение", "мало людей", "без плитки"],
+    "map_link": "https://www.openstreetmap.org/relation/123468"
+  },
+  {
+    "id": "spb-neva-long",
+    "city": "Санкт-Петербург",
+    "name": "Набережная Невы — длинный маршрут",
+    "distance_km": 10.0,
+    "surface_type": "embankment",
+    "description": "Длинный отрезок вдоль Невы. Асфальт, мало светофоров, подходит для темпового бега.",
+    "features": ["освещение", "средняя людность", "длинный отрезок"],
+    "map_link": "https://www.openstreetmap.org/relation/123469"
+  },
+  {
+    "id": "spb-park-300",
+    "city": "Санкт-Петербург",
+    "name": "Парк 300-летия Санкт-Петербурга",
+    "distance_km": 5.5,
+    "surface_type": "asphalt",
+    "description": "Современный парк у залива. Ровный асфальт, ветер с моря, мало людей.",
+    "features": ["освещение", "мало людей", "ровный рельеф"],
+    "map_link": "https://www.openstreetmap.org/relation/123470"
+  }
+]

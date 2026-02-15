@@ -1,6 +1,6 @@
 # Архитектура приложения
 
-## 🏗️ Общая архитектура
+## Общая архитектура MVP
 
 ```
 ┌─────────────┐
@@ -18,29 +18,39 @@
 ┌─────────────┐
 │  Handlers   │
 │  (commands, │
+│   search,   │
 │  messages)  │
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
 │  Services   │
-│ (business   │
-│   logic)    │
+│ RouteService│
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│   Models    │
-│   (data)    │
+│   Storage   │
+│ routes.json │
+│ user_data   │
 └─────────────┘
 ```
 
-## 🛠️ Технологический стек
+## Поток поиска маршрута
+
+```
+/find → [Выбор города] → [Ввод дистанции] → [Выбор поверхности] → Результаты
+         (inline)           (текст)              (inline)
+```
+
+Состояния диалога: `CITY` → `DISTANCE` → `SURFACE` → `END`
+
+## Технологический стек MVP
 
 - **Язык**: Python 3.10+
-- **Фреймворк**: python-telegram-bot
-- **База данных**: [SQLite/PostgreSQL/MongoDB - выбрать]
-- **Кэширование**: [Redis - опционально]
+- **Фреймворк**: python-telegram-bot 20.7
+- **Данные маршрутов**: JSON-файл (`data/routes.json`)
+- **Состояние диалога**: in-memory (`context.user_data`)
 - **Логирование**: logging (стандартная библиотека)
 
 ## 📦 Компоненты системы
@@ -51,26 +61,41 @@
 - Обработка ошибок верхнего уровня
 
 ### Handlers (`src/handlers/`)
-- Обработчики команд (`/start`, `/help`, и т.д.)
-- Обработчики сообщений
-- Обработчики callback-запросов (inline кнопки)
+- **commands.py** — `/start`, `/help`
+- **search.py** — `/find`, ConversationHandler (город, дистанция, поверхность), `/cancel`
+- **messages.py** — fallback для неизвестных сообщений
 
 ### Services (`src/services/`)
-- Бизнес-логика приложения
-- Интеграции с внешними API
-- Обработка данных
+- **route_service.py** — загрузка `routes.json`, фильтрация по city/distance/surface_type
 
 ### Models (`src/models/`)
-- Модели данных
-- Схемы базы данных
-- Валидация данных
+- **route.py** — dataclass Route (id, city, name, distance_km, surface_type, description, features, map_link)
 
 ### Utils (`src/utils/`)
 - Вспомогательные функции
 - Утилиты форматирования
 - Константы
 
-## 🔐 Безопасность
+### Структура `data/routes.json`
+
+Массив объектов маршрутов. Каждый объект:
+
+```json
+{
+  "id": "msk-gorky-1",
+  "city": "Москва",
+  "name": "Парк Горького — Нескучный сад",
+  "distance_km": 6.0,
+  "surface_type": "park",
+  "description": "Краткое описание маршрута",
+  "features": ["освещение", "мало людей", "без плитки"],
+  "map_link": "https://..."
+}
+```
+
+Типы поверхности: `asphalt`, `park`, `trail`, `embankment`
+
+## Безопасность
 
 - Хранение токенов в переменных окружения
 - Валидация входящих данных
