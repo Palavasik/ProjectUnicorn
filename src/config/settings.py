@@ -23,6 +23,13 @@ class Settings:
         self.redis_host: Optional[str] = os.getenv("REDIS_HOST")
         self.redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
         self.redis_db: int = int(os.getenv("REDIS_DB", "0"))
+
+        # OpenRouteService (маршрутизация)
+        self.ors_api_key: Optional[str] = os.getenv("OPENROUTESERVICE_API_KEY")
+
+        # Railway / webhook
+        self.port: int = int(os.getenv("PORT", "0"))
+        self.webhook_url: Optional[str] = os.getenv("WEBHOOK_URL")
     
     def validate(self) -> bool:
         """

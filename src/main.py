@@ -1,9 +1,11 @@
 """
 Главный файл приложения Telegram-бота.
 Точка входа для запуска бота.
+Локально: polling. На Railway: webhook.
 """
 
 import logging
+import os
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application
@@ -34,8 +36,21 @@ def main():
     bot = Bot(application)
     bot.setup_handlers()
 
-    logger.info("Бот запущен...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    port = int(os.getenv("PORT", "0"))
+    webhook_url = os.getenv("WEBHOOK_URL")
+
+    if port and webhook_url:
+        logger.info("Запуск в режиме webhook (Railway)...")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path="webhook",
+            webhook_url=f"{webhook_url.rstrip('/')}/webhook",
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        logger.info("Бот запущен (polling)...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == '__main__':

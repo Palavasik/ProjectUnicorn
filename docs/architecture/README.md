@@ -49,7 +49,7 @@
 
 - **Язык**: Python 3.10+
 - **Фреймворк**: python-telegram-bot 20.7
-- **Данные маршрутов**: JSON-файл (`data/routes.json`)
+- **Данные маршрутов**: OpenRouteService API (при API-ключе) или JSON (`data/routes.json`) как fallback
 - **Состояние диалога**: in-memory (`context.user_data`)
 - **Логирование**: logging (стандартная библиотека)
 
@@ -66,7 +66,8 @@
 - **messages.py** — fallback для неизвестных сообщений
 
 ### Services (`src/services/`)
-- **route_service.py** — загрузка `routes.json`, фильтрация по city/distance/surface_type
+- **route_service.py** — поиск маршрутов: ORS (геокодинг + Directions) или fallback на `routes.json`
+- **openroute_service.py** — клиент OpenRouteService (геокодинг, Directions foot-walking, парсинг surface)
 
 ### Models (`src/models/`)
 - **route.py** — dataclass Route (id, city, name, distance_km, surface_type, description, features, map_link)

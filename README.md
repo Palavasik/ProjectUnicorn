@@ -27,13 +27,28 @@ pip install -r requirements.txt
 
 cp .env.example .env
 # Добавьте BOT_TOKEN в .env
+# Опционально: OPENROUTESERVICE_API_KEY для динамических маршрутов (иначе — JSON)
 ```
 
-### Запуск
+### Запуск (локально)
 
 ```bash
 python src/main.py
 ```
+
+Локально используется **polling**. На Railway — **webhook** (см. ниже).
+
+### Деплой на Railway
+
+1. Создайте проект на [Railway](https://railway.app) и подключите репозиторий.
+2. В **Variables** задайте:
+   - `BOT_TOKEN` — токен от [@BotFather](https://t.me/BotFather)
+   - `OPENROUTESERVICE_API_KEY` — (опционально) ключ ORS
+   - `WEBHOOK_URL` — публичный URL сервиса (Railway → Settings → Generate Domain; например `https://your-app.up.railway.app`)
+3. `PORT` и домен Railway задаются автоматически.
+4. Деплой по push в ветку; бот запустится в режиме webhook.
+
+Файлы для Railway: `Procfile`, `runtime.txt`, `railway.json`.
 
 ### Команды бота
 

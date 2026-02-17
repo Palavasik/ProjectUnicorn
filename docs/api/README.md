@@ -45,7 +45,11 @@
 
 ### Внешние API
 
-MVP не использует внешние API. Данные маршрутов загружаются из `data/routes.json`.
+**OpenRouteService** (при наличии `OPENROUTESERVICE_API_KEY`):
+- `GET /geocode/search` — геокодинг города
+- `POST /v2/directions/foot-walking/geojson` — построение маршрута с `extra_info: ["surface"]`
+
+**Fallback:** при отсутствии ключа или ошибке ORS — данные из `data/routes.json`.
 
 ## Запуск
 

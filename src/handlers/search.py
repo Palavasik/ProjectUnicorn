@@ -5,6 +5,7 @@
 import logging
 import re
 
+import httpx
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     CallbackQueryHandler,
@@ -141,8 +142,37 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.edit_message_text("Сессия поиска истекла. Используйте /find для нового поиска.")
         return ConversationHandler.END
 
-    routes = route_service.search(city=city, distance_km=distance, surface_type=surface_type)
-    result_text = _format_routes_list(routes)
+    try:
+        routes = route_service.search(city=city, distance_km=distance, surface_type=surface_type)
+        result_text = _format_routes_list(routes)
+    except httpx.TimeoutException:
+        logger.warning("Timeout при поиске маршрутов для %s", city)
+        result_text = (
+            "Сервис маршрутизации не ответил вовремя. "
+            "Попробуйте позже или измените параметры поиска.\n\n"
+            "Используйте /find для нового поиска."
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            result_text = (
+                "Превышен лимит запросов к сервису маршрутов. "
+                "Попробуйте через несколько минут.\n\n"
+                "Используйте /find для нового поиска."
+            )
+        else:
+            result_text = (
+                "Временная ошибка сервиса маршрутов. "
+                "Попробуйте позже.\n\n"
+                "Используйте /find для нового поиска."
+            )
+        logger.error("ORS HTTP error: %s", e)
+    except Exception as e:
+        logger.exception("Ошибка поиска маршрутов: %s", e)
+        result_text = (
+            "Произошла ошибка при поиске. Попробуйте изменить параметры "
+            "или повторить позже.\n\n"
+            "Используйте /find для нового поиска."
+        )
 
     await query.edit_message_text(
         result_text,

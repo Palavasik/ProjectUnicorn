@@ -13,8 +13,8 @@ python-dotenv==1.0.0
 # Redis (опционально)
 # redis==5.0.1
 
-# HTTP requests (если нужны внешние API)
-# requests==2.31.0
+# HTTP requests (для OpenRouteService API)
+httpx>=0.27.0
 
 # Logging (расширенное)
 # loguru==0.7.2
