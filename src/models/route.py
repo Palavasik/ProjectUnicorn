@@ -5,6 +5,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from utils.map_links import build_route_map_link
+
 
 @dataclass
 class Route:
@@ -65,11 +67,7 @@ class Route:
         features = [surface_type, "динамический маршрут"]
 
         geometry = route_data.get("geometry", {}).get("coordinates", [])
-        map_link = None
-        if geometry:
-            mid = len(geometry) // 2
-            lat, lon = geometry[mid][1], geometry[mid][0]
-            map_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}&zoom=14"
+        map_link = build_route_map_link(geometry) if geometry else None
 
         route_id = f"ors-{city}-{distance_km}-{surface_type}-{direction}".replace(" ", "_")
 
