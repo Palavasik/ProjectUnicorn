@@ -6,6 +6,7 @@ import logging
 import re
 
 import httpx
+from telegram import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     CallbackQueryHandler,
@@ -20,8 +21,27 @@ from services.route_service import route_service
 
 logger = logging.getLogger(__name__)
 
-# Состояния диалога
-CITY, DISTANCE, SURFACE = range(3)
+# Состояния диалога: стартовая точка -> дистанция -> поверхность
+LOCATION, DISTANCE, SURFACE = range(3)
+
+# Regex для координат: lat, lon (разделитель запятая, точка с запятой или пробел)
+COORDS_PATTERN = re.compile(r"^(-?\d+\.?\d*)\s*[,;\s]\s*(-?\d+\.?\d*)$")
+
+
+def _parse_coords(text: str) -> tuple[float, float] | None:
+    """Парсинг координат из строки. Возвращает (lat, lon) или None."""
+    text = text.strip()
+    match = COORDS_PATTERN.match(text)
+    if not match:
+        return None
+    try:
+        lat = float(match.group(1).replace(",", "."))
+        lon = float(match.group(2).replace(",", "."))
+    except ValueError:
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    return (lat, lon)
 
 
 def _format_route(route, index: int) -> str:
@@ -46,7 +66,7 @@ def _format_routes_list(routes: list) -> str:
     if not routes:
         return (
             "Маршруты не найдены. Попробуйте изменить параметры: "
-            "другой город, дистанцию или тип поверхности.\n\n"
+            "другую точку старта, дистанцию или тип поверхности.\n\n"
             "Используйте /find для нового поиска."
         )
 
@@ -56,32 +76,57 @@ def _format_routes_list(routes: list) -> str:
 
 
 async def find_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Старт сценария поиска — показ выбора города."""
-    cities = route_service.get_cities()
-    keyboard = [
-        [InlineKeyboardButton(city, callback_data=f"city:{city}")] for city in cities
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
+    """Старт сценария поиска — запрос стартовой точки (геолокация или координаты)."""
+    keyboard = [[KeyboardButton("Отправить геолокацию", request_location=True)]]
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        one_time_keyboard=True,
+        resize_keyboard=True,
+    )
     await update.message.reply_text(
-        "Выберите город:",
+        "Отправьте геолокацию (кнопка ниже) или введите координаты старта, например: 55.7558, 37.6173",
         reply_markup=reply_markup,
     )
-    return CITY
+    return LOCATION
 
 
-async def city_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обработка выбора города."""
-    query = update.callback_query
-    await query.answer()
+async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Приём геолокации от пользователя."""
+    loc = update.message.location
+    if not loc:
+        return LOCATION
+    context.user_data["search_start_lat"] = loc.latitude
+    context.user_data["search_start_lon"] = loc.longitude
+    await update.message.reply_text(
+        "Точка старта принята.\n\nУкажите желаемую дистанцию в км (например: 10):",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return DISTANCE
 
-    if not query.data or not query.data.startswith("city:"):
-        return ConversationHandler.END
 
-    city = query.data.replace("city:", "")
-    context.user_data["search_city"] = city
-
-    await query.edit_message_text(f"Город: <b>{city}</b>\n\nУкажите желаемую дистанцию в км (например: 10):")
+async def location_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Приём координат из текста (lat, lon)."""
+    text = update.message.text.strip()
+    coords = _parse_coords(text)
+    if coords is None:
+        await update.message.reply_text(
+            "Неверный формат. Введите координаты в формате: широта, долгота\n"
+            "Например: 55.7558, 37.6173\n"
+            "Или отправьте геолокацию кнопкой ниже.",
+            reply_markup=ReplyKeyboardMarkup(
+                [[KeyboardButton("Отправить геолокацию", request_location=True)]],
+                one_time_keyboard=True,
+                resize_keyboard=True,
+            ),
+        )
+        return LOCATION
+    lat, lon = coords
+    context.user_data["search_start_lat"] = lat
+    context.user_data["search_start_lon"] = lon
+    await update.message.reply_text(
+        "Точка старта принята.\n\nУкажите желаемую дистанцию в км (например: 10):",
+        reply_markup=ReplyKeyboardRemove(),
+    )
     return DISTANCE
 
 
@@ -135,18 +180,27 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return ConversationHandler.END
 
     surface_type = query.data.replace("surface:", "")
-    city = context.user_data.get("search_city")
+    start_lon = context.user_data.get("search_start_lon")
+    start_lat = context.user_data.get("search_start_lat")
     distance = context.user_data.get("search_distance")
 
-    if not city or not distance:
+    if start_lon is None or start_lat is None or distance is None:
         await query.edit_message_text("Сессия поиска истекла. Используйте /find для нового поиска.")
         return ConversationHandler.END
 
     try:
-        routes = route_service.search(city=city, distance_km=distance, surface_type=surface_type)
+        routes = route_service.search(
+            start_lon=start_lon,
+            start_lat=start_lat,
+            distance_km=distance,
+            surface_type=surface_type,
+        )
         result_text = _format_routes_list(routes)
+    except ValueError as e:
+        # Нет ORS ключа — сервис выбросит ValueError с сообщением
+        result_text = str(e) + "\n\nИспользуйте /find для нового поиска."
     except httpx.TimeoutException:
-        logger.warning("Timeout при поиске маршрутов для %s", city)
+        logger.warning("Timeout при поиске маршрутов для (%.4f, %.4f)", start_lon, start_lat)
         result_text = (
             "Сервис маршрутизации не ответил вовремя. "
             "Попробуйте позже или измените параметры поиска.\n\n"
@@ -181,7 +235,8 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
     # Очистка данных поиска
-    context.user_data.pop("search_city", None)
+    context.user_data.pop("search_start_lon", None)
+    context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
 
     return ConversationHandler.END
@@ -189,7 +244,8 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отмена текущего диалога поиска."""
-    context.user_data.pop("search_city", None)
+    context.user_data.pop("search_start_lon", None)
+    context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
     await update.message.reply_text("Поиск отменён. Используйте /find когда будете готовы.")
     return ConversationHandler.END
@@ -200,8 +256,9 @@ def get_search_conversation_handler() -> ConversationHandler:
     return ConversationHandler(
         entry_points=[CommandHandler("find", find_handler)],
         states={
-            CITY: [
-                CallbackQueryHandler(city_callback, pattern=r"^city:"),
+            LOCATION: [
+                MessageHandler(filters.LOCATION, location_handler),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, location_text_handler),
             ],
             DISTANCE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, distance_handler),

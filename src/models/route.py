@@ -59,11 +59,11 @@ class Route:
         direction_labels = {"north": "север", "east": "восток", "south": "юг", "west": "запад"}
         dir_label = direction_labels.get(direction, "")
 
-        name = f"Маршрут от центра ({distance_km} км)"
+        name = f"Маршрут от старта ({distance_km} км)"
         if dir_label:
             name = f"Маршрут на {dir_label} ({distance_km} км)"
 
-        description = f"Круговой маршрут от центра города. Дистанция {distance_km} км."
+        description = f"Круговой маршрут от стартовой точки. Дистанция {distance_km} км."
         features = [surface_type, "динамический маршрут"]
 
         geometry = route_data.get("geometry", {}).get("coordinates", [])

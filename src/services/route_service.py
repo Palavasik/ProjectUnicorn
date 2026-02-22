@@ -73,26 +73,22 @@ class RouteService:
 
     def search_ors(
         self,
-        city: str,
+        start_lon: float,
+        start_lat: float,
         distance_km: float,
         surface_type: str,
     ) -> list[Route]:
-        """Поиск маршрутов через OpenRouteService."""
+        """Поиск маршрутов через OpenRouteService от заданной точки."""
         ors = self._get_ors_client()
         if not ors:
             return []
 
-        coords = ors.geocode(city)
-        if not coords:
-            logger.warning("ORS: не удалось геокодировать %s", city)
-            return []
-
-        lon, lat = coords
+        place_name = "От вашей точки"
         directions_order = ["north", "east", "south", "west"]
         best_routes: list[tuple[float, Route]] = []
 
         for direction in directions_order:
-            route_data = ors.get_round_route(lon, lat, distance_km, direction)
+            route_data = ors.get_round_route(start_lon, start_lat, distance_km, direction)
             if not route_data:
                 continue
 
@@ -100,17 +96,17 @@ class RouteService:
             match_ratio = surface_share.get(surface_type, 0.0)
 
             if match_ratio >= SURFACE_MATCH_THRESHOLD:
-                route = Route.from_ors(route_data, city, surface_type, direction)
+                route = Route.from_ors(route_data, place_name, surface_type, direction)
                 best_routes.append((match_ratio, route))
 
         if not best_routes:
             # Вернуть лучший по surface даже если ниже порога
             for direction in directions_order:
-                route_data = ors.get_round_route(lon, lat, distance_km, direction)
+                route_data = ors.get_round_route(start_lon, start_lat, distance_km, direction)
                 if route_data:
                     surface_share = ors.parse_surface_from_route(route_data)
                     match_ratio = surface_share.get(surface_type, 0.0)
-                    route = Route.from_ors(route_data, city, surface_type, direction)
+                    route = Route.from_ors(route_data, place_name, surface_type, direction)
                     best_routes.append((match_ratio, route))
                     break
 
@@ -119,40 +115,30 @@ class RouteService:
 
     def search(
         self,
-        city: str,
+        start_lon: float,
+        start_lat: float,
         distance_km: float,
         surface_type: str,
-        tolerance_km: float = 2.0,
     ) -> list[Route]:
         """
-        Поиск маршрутов по критериям.
+        Поиск маршрутов по точке старта и критериям.
 
-        При наличии OPENROUTESERVICE_API_KEY использует ORS, иначе — JSON.
+        Требует OPENROUTESERVICE_API_KEY. Без ключа выбрасывает ValueError.
         """
-        if self._get_ors_client():
-            try:
-                routes = self.search_ors(city, distance_km, surface_type)
-                if routes:
-                    logger.info("ORS: найдено %d маршрутов для %s", len(routes), city)
-                    return routes
-            except Exception as e:
-                logger.error("ORS search error: %s, fallback to JSON", e)
-
-        # Fallback на JSON
-        routes = self.load_routes()
-        min_dist = distance_km - tolerance_km
-        max_dist = distance_km + tolerance_km
-
-        filtered = [
-            r
-            for r in routes
-            if r.city == city
-            and r.surface_type == surface_type
-            and min_dist <= r.distance_km <= max_dist
-        ]
-
-        filtered.sort(key=lambda r: abs(r.distance_km - distance_km))
-        return filtered
+        if not self._get_ors_client():
+            raise ValueError(
+                "Поиск по точке доступен только при настройке OpenRouteService. "
+                "Укажите OPENROUTESERVICE_API_KEY в настройках."
+            )
+        routes = self.search_ors(start_lon, start_lat, distance_km, surface_type)
+        if routes:
+            logger.info(
+                "ORS: найдено %d маршрутов для (%.4f, %.4f)",
+                len(routes),
+                start_lon,
+                start_lat,
+            )
+        return routes
 
     def get_cities(self) -> list[str]:
         """Получить список доступных городов."""

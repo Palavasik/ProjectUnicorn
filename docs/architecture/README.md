@@ -62,11 +62,11 @@
 
 ### Handlers (`src/handlers/`)
 - **commands.py** — `/start`, `/help`
-- **search.py** — `/find`, ConversationHandler (город, дистанция, поверхность), `/cancel`
+- **search.py** — `/find`, ConversationHandler (стартовая точка: геолокация/координаты, дистанция, поверхность), `/cancel`
 - **messages.py** — fallback для неизвестных сообщений
 
 ### Services (`src/services/`)
-- **route_service.py** — поиск маршрутов: ORS (геокодинг + Directions) или fallback на `routes.json`
+- **route_service.py** — поиск маршрутов по точке старта (lon, lat): ORS Directions от заданных координат
 - **openroute_service.py** — клиент OpenRouteService (геокодинг, Directions foot-walking, парсинг surface)
 
 ### Models (`src/models/`)
