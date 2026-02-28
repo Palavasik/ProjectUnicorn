@@ -85,7 +85,9 @@ async def find_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         resize_keyboard=True,
     )
     await update.message.reply_text(
-        "Отправьте геолокацию (кнопка ниже) или введите координаты старта, например: 55.7558, 37.6173",
+        "Отправьте геолокацию кнопкой ниже (на телефоне) или введите координаты вручную: широта, долгота\n"
+        "Например: 55.7558, 37.6173\n\n"
+        "В десктопной или веб-версии Telegram кнопка может не работать — тогда введите координаты текстом.",
         reply_markup=reply_markup,
     )
     return LOCATION
@@ -111,9 +113,8 @@ async def location_text_handler(update: Update, context: ContextTypes.DEFAULT_TY
     coords = _parse_coords(text)
     if coords is None:
         await update.message.reply_text(
-            "Неверный формат. Введите координаты в формате: широта, долгота\n"
-            "Например: 55.7558, 37.6173\n"
-            "Или отправьте геолокацию кнопкой ниже.",
+            "Неверный формат. Введите координаты: широта, долгота (например: 55.7558, 37.6173).\n"
+            "На телефоне можно нажать «Отправить геолокацию».",
             reply_markup=ReplyKeyboardMarkup(
                 [[KeyboardButton("Отправить геолокацию", request_location=True)]],
                 one_time_keyboard=True,
