@@ -268,4 +268,5 @@ def get_search_conversation_handler() -> ConversationHandler:
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel_handler)],
+        per_message=True,
     )
