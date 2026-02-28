@@ -3,9 +3,10 @@
 Отвечает за настройку и регистрацию обработчиков.
 """
 
+import re
 from telegram.ext import CommandHandler, MessageHandler, filters
 
-from handlers.commands import help_handler, start_handler
+from handlers.commands import BUTTON_MAIN, help_handler, start_handler
 from handlers.messages import fallback_handler
 from handlers.search import get_search_conversation_handler
 
@@ -27,6 +28,13 @@ class Bot:
         self.application.add_handler(CommandHandler("start", start_handler))
         self.application.add_handler(CommandHandler("help", help_handler))
         self.application.add_handler(get_search_conversation_handler())
+        # Кнопка «Главная» — то же, что /start
+        self.application.add_handler(
+            MessageHandler(
+                filters.Regex(f"^{re.escape(BUTTON_MAIN)}$"),
+                start_handler,
+            )
+        )
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, fallback_handler)
         )

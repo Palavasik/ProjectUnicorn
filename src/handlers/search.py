@@ -17,6 +17,7 @@ from telegram.ext import (
     filters,
 )
 
+from handlers.commands import BUTTON_FIND, BUTTON_MAIN, start_handler
 from services.route_service import route_service
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ def _format_routes_list(routes: list) -> str:
         return (
             "Маршруты не найдены. Попробуйте изменить параметры: "
             "другую точку старта, дистанцию или тип поверхности.\n\n"
-            "Используйте /find для нового поиска."
+            "Нажмите «Найти маршрут» для нового поиска."
         )
 
     header = f"Нашёл {len(routes)} маршрут(ов) под ваши критерии:\n\n"
@@ -185,7 +186,7 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     distance = context.user_data.get("search_distance")
 
     if start_lon is None or start_lat is None or distance is None:
-        await query.edit_message_text("Сессия поиска истекла. Используйте /find для нового поиска.")
+        await query.edit_message_text("Сессия поиска истекла. Нажмите «Найти маршрут» для нового поиска.")
         return ConversationHandler.END
 
     try:
@@ -198,26 +199,26 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         result_text = _format_routes_list(routes)
     except ValueError as e:
         # Нет ORS ключа — сервис выбросит ValueError с сообщением
-        result_text = str(e) + "\n\nИспользуйте /find для нового поиска."
+        result_text = str(e) + "\n\nНажмите «Найти маршрут» для нового поиска."
     except httpx.TimeoutException:
         logger.warning("Timeout при поиске маршрутов для (%.4f, %.4f)", start_lon, start_lat)
         result_text = (
             "Сервис маршрутизации не ответил вовремя. "
             "Попробуйте позже или измените параметры поиска.\n\n"
-            "Используйте /find для нового поиска."
+            "Нажмите «Найти маршрут» для нового поиска."
         )
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 429:
             result_text = (
                 "Превышен лимит запросов к сервису маршрутов. "
                 "Попробуйте через несколько минут.\n\n"
-                "Используйте /find для нового поиска."
+                "Нажмите «Найти маршрут» для нового поиска."
             )
         else:
             result_text = (
                 "Временная ошибка сервиса маршрутов. "
                 "Попробуйте позже.\n\n"
-                "Используйте /find для нового поиска."
+                "Нажмите «Найти маршрут» для нового поиска."
             )
         logger.error("ORS HTTP error: %s", e)
     except Exception as e:
@@ -225,7 +226,7 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         result_text = (
             "Произошла ошибка при поиске. Попробуйте изменить параметры "
             "или повторить позже.\n\n"
-            "Используйте /find для нового поиска."
+            "Нажмите «Найти маршрут» для нового поиска."
         )
 
     await query.edit_message_text(
@@ -247,14 +248,26 @@ async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data.pop("search_start_lon", None)
     context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
-    await update.message.reply_text("Поиск отменён. Используйте /find когда будете готовы.")
+    await update.message.reply_text("Поиск отменён. Нажмите «Найти маршрут» для нового поиска.")
+    return ConversationHandler.END
+
+
+async def main_button_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Кнопка «Главная» — выход в главное меню."""
+    context.user_data.pop("search_start_lon", None)
+    context.user_data.pop("search_start_lat", None)
+    context.user_data.pop("search_distance", None)
+    await start_handler(update, context)
     return ConversationHandler.END
 
 
 def get_search_conversation_handler() -> ConversationHandler:
     """Создать ConversationHandler для поиска маршрутов."""
     return ConversationHandler(
-        entry_points=[CommandHandler("find", find_handler)],
+        entry_points=[
+            CommandHandler("find", find_handler),
+            MessageHandler(filters.Regex(f"^{re.escape(BUTTON_FIND)}$"), find_handler),
+        ],
         states={
             LOCATION: [
                 MessageHandler(filters.LOCATION, location_handler),
@@ -267,5 +280,8 @@ def get_search_conversation_handler() -> ConversationHandler:
                 CallbackQueryHandler(surface_callback, pattern=r"^surface:"),
             ],
         },
-        fallbacks=[CommandHandler("cancel", cancel_handler)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_handler),
+            MessageHandler(filters.Regex(f"^{re.escape(BUTTON_MAIN)}$"), main_button_fallback),
+        ],
     )
