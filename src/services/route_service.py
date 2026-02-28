@@ -29,8 +29,8 @@ SURFACE_TYPES = {
 # Города для выбора (кнопки)
 CITIES = ["Москва", "Санкт-Петербург"]
 
-# Порог доли нужного surface для принятия маршрута (0.6 = 60%)
-SURFACE_MATCH_THRESHOLD = 0.5
+# Максимум маршрутов в выдаче (без выбора поверхности — показываем тип у каждого)
+MAX_ROUTES_IN_RESULT = 10
 
 
 class RouteService:
@@ -71,57 +71,52 @@ class RouteService:
             logger.error("Ошибка загрузки маршрутов: %s", e)
             return []
 
+    def _dominant_surface(self, surface_share: dict[str, float]) -> str:
+        """Тип поверхности с максимальной долей; по умолчанию asphalt."""
+        if not surface_share:
+            return "asphalt"
+        return max(surface_share, key=surface_share.get)  # type: ignore[arg-type]
+
     def search_ors(
         self,
         start_lon: float,
         start_lat: float,
         distance_km: float,
-        surface_type: str,
     ) -> list[Route]:
-        """Поиск маршрутов через OpenRouteService от заданной точки."""
+        """
+        Поиск маршрутов через OpenRouteService от заданной точки.
+        Возвращает до MAX_ROUTES_IN_RESULT вариантов; у каждого свой тип поверхности из ORS.
+        """
         ors = self._get_ors_client()
         if not ors:
             return []
 
         place_name = "От вашей точки"
-        directions_order = ["north", "east", "south", "west"]
-        best_routes: list[tuple[float, Route]] = []
+        directions_order = list(ors.get_directions_order())
+        routes: list[Route] = []
 
         for direction in directions_order:
+            if len(routes) >= MAX_ROUTES_IN_RESULT:
+                break
             route_data = ors.get_round_route(start_lon, start_lat, distance_km, direction)
             if not route_data:
                 continue
-
             surface_share = ors.parse_surface_from_route(route_data)
-            match_ratio = surface_share.get(surface_type, 0.0)
+            surface_type = self._dominant_surface(surface_share)
+            route = Route.from_ors(route_data, place_name, surface_type, direction)
+            routes.append(route)
 
-            if match_ratio >= SURFACE_MATCH_THRESHOLD:
-                route = Route.from_ors(route_data, place_name, surface_type, direction)
-                best_routes.append((match_ratio, route))
-
-        if not best_routes:
-            # Вернуть лучший по surface даже если ниже порога
-            for direction in directions_order:
-                route_data = ors.get_round_route(start_lon, start_lat, distance_km, direction)
-                if route_data:
-                    surface_share = ors.parse_surface_from_route(route_data)
-                    match_ratio = surface_share.get(surface_type, 0.0)
-                    route = Route.from_ors(route_data, place_name, surface_type, direction)
-                    best_routes.append((match_ratio, route))
-                    break
-
-        best_routes.sort(key=lambda x: -x[0])
-        return [r for _, r in best_routes[:3]]
+        return routes
 
     def search(
         self,
         start_lon: float,
         start_lat: float,
         distance_km: float,
-        surface_type: str,
     ) -> list[Route]:
         """
-        Поиск маршрутов по точке старта и критериям.
+        Поиск маршрутов по точке старта и дистанции.
+        Возвращает до 10 вариантов; тип поверхности определяется по данным ORS для каждого маршрута.
 
         Требует OPENROUTESERVICE_API_KEY. Без ключа выбрасывает ValueError.
         """
@@ -130,7 +125,7 @@ class RouteService:
                 "Поиск по точке доступен только при настройке OpenRouteService. "
                 "Укажите OPENROUTESERVICE_API_KEY в настройках."
             )
-        routes = self.search_ors(start_lon, start_lat, distance_km, surface_type)
+        routes = self.search_ors(start_lon, start_lat, distance_km)
         if routes:
             logger.info(
                 "ORS: найдено %d маршрутов для (%.4f, %.4f)",

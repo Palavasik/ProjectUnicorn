@@ -4,6 +4,7 @@
 """
 
 import logging
+import math
 from typing import Optional
 
 import httpx
@@ -37,13 +38,29 @@ ORS_SURFACE_ID_TO_PRODUCT = {
 }
 
 # Направления для построения кругового маршрута (delta lat, delta lon на 1 км)
-# lat: 1 deg ≈ 111 km, lon: 1 deg ≈ 111*cos(lat) km
-DIRECTIONS = {
-    "north": (1 / 111, 0),
-    "east": (0, 1 / (111 * 0.6)),  # cos(55°) ≈ 0.6 для Москвы
-    "south": (-1 / 111, 0),
-    "west": (0, -1 / (111 * 0.6)),
-}
+# lat: 1 deg ≈ 111 km, lon: 1 deg ≈ 111*cos(lat) km. 10 направлений для 10 вариантов.
+_COS_LAT = 0.6  # cos(55°) для средней полосы
+_DIRECTIONS_ANGLES = [
+    ("north", 0),
+    ("north_east", 45),
+    ("east", 90),
+    ("south_east", 135),
+    ("south", 180),
+    ("south_west", 225),
+    ("west", 270),
+    ("north_west", 315),
+    ("north_north_east", 22.5),
+    ("east_south_east", 67.5),
+]
+DIRECTIONS = {}
+for _name, _deg in _DIRECTIONS_ANGLES:
+    _rad = math.radians(_deg)
+    # delta per 1 km: lat uses 1/111, lon uses 1/(111*cos(lat))
+    _dlat = math.cos(_rad) / 111
+    _dlon = math.sin(_rad) / (111 * _COS_LAT)
+    DIRECTIONS[_name] = (_dlat, _dlon)
+
+DIRECTIONS_ORDER = list(DIRECTIONS.keys())
 
 
 class OpenRouteServiceError(Exception):
@@ -100,6 +117,11 @@ class OpenRouteService:
         except (httpx.RequestError, KeyError, ValueError) as e:
             logger.error("ORS geocode error: %s", e)
             return None
+
+    @staticmethod
+    def get_directions_order() -> list[str]:
+        """Порядок направлений для построения до 10 вариантов маршрутов."""
+        return DIRECTIONS_ORDER.copy()
 
     def _point_at_distance(
         self, lon: float, lat: float, distance_km: float, direction: str

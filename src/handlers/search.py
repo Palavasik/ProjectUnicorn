@@ -6,8 +6,14 @@ import logging
 import re
 
 import httpx
-from telegram import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+)
 from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
@@ -22,8 +28,25 @@ from services.route_service import route_service
 
 logger = logging.getLogger(__name__)
 
-# Состояния диалога: стартовая точка -> дистанция -> поверхность
-LOCATION, DISTANCE, SURFACE = range(3)
+# Состояния диалога: стартовая точка -> дистанция -> результаты
+LOCATION, DISTANCE = range(2)
+
+# Варианты дистанции: callback_data -> (подпись кнопки, значение в км)
+DISTANCE_OPTIONS = [
+    ("short", "Короткая (3–5 км)", 4),
+    ("daily", "Ежедневная (10 км)", 10),
+    ("long", "Длинная (18–20 км)", 19),
+]
+DISTANCE_KM_BY_KEY = {key: km for key, _label, km in DISTANCE_OPTIONS}
+
+
+def _get_distance_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора дистанции (три кнопки)."""
+    buttons = [
+        [InlineKeyboardButton(label, callback_data=f"distance:{key}")]
+        for key, label, _km in DISTANCE_OPTIONS
+    ]
+    return InlineKeyboardMarkup(buttons)
 
 # Regex для координат: lat, lon (разделитель запятая, точка с запятой или пробел)
 COORDS_PATTERN = re.compile(r"^(-?\d+\.?\d*)\s*[,;\s]\s*(-?\d+\.?\d*)$")
@@ -66,12 +89,14 @@ def _format_routes_list(routes: list) -> str:
     """Форматирование списка маршрутов."""
     if not routes:
         return (
-            "Маршруты не найдены. Попробуйте изменить параметры: "
-            "другую точку старта, дистанцию или тип поверхности.\n\n"
+            "Маршруты не найдены. Попробуйте изменить точку старта или дистанцию.\n\n"
             "Нажмите «Найти маршрут» для нового поиска."
         )
 
-    header = f"Нашёл {len(routes)} маршрут(ов) под ваши критерии:\n\n"
+    header = (
+        f"Нашёл {len(routes)} вариантов маршрутов. "
+        "У каждого указан тип поверхности (асфальт, парк, трейл, набережная).\n\n"
+    )
     items = [_format_route(r, i + 1) for i, r in enumerate(routes)]
     return header + "\n\n".join(items)
 
@@ -101,8 +126,8 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data["search_start_lat"] = loc.latitude
     context.user_data["search_start_lon"] = loc.longitude
     await update.message.reply_text(
-        "Точка старта принята.\n\nУкажите желаемую дистанцию в км (например: 10):",
-        reply_markup=ReplyKeyboardRemove(),
+        "Точка старта принята.\n\nВыберите дистанцию:",
+        reply_markup=_get_distance_keyboard(),
     )
     return DISTANCE
 
@@ -126,67 +151,33 @@ async def location_text_handler(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data["search_start_lat"] = lat
     context.user_data["search_start_lon"] = lon
     await update.message.reply_text(
-        "Точка старта принята.\n\nУкажите желаемую дистанцию в км (например: 10):",
-        reply_markup=ReplyKeyboardRemove(),
+        "Точка старта принята.\n\nВыберите дистанцию:",
+        reply_markup=_get_distance_keyboard(),
     )
     return DISTANCE
 
 
-async def distance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Приём дистанции от пользователя."""
-    text = update.message.text.strip()
-
-    # Валидация: число от 1 до 50
-    match = re.match(r"^(\d+(?:[.,]\d+)?)$", text.replace(",", "."))
-    if not match:
-        await update.message.reply_text(
-            "Пожалуйста, введите число — дистанцию в километрах (например: 10 или 5.5):"
-        )
-        return DISTANCE
-
-    try:
-        distance = float(match.group(1).replace(",", "."))
-    except ValueError:
-        await update.message.reply_text("Введите корректное число (например: 10):")
-        return DISTANCE
-
-    if distance < 1 or distance > 50:
-        await update.message.reply_text("Дистанция должна быть от 1 до 50 км:")
-        return DISTANCE
-
-    context.user_data["search_distance"] = distance
-
-    surface_types = route_service.get_surface_types()
-    keyboard = [
-        [
-            InlineKeyboardButton(label, callback_data=f"surface:{stype}")
-            for stype, label in list(surface_types.items())[i : i + 2]
-        ]
-        for i in range(0, len(surface_types), 2)
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        f"Дистанция: <b>{distance} км</b>\n\nВыберите тип поверхности:",
-        reply_markup=reply_markup,
-    )
-    return SURFACE
-
-
-async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обработка выбора типа поверхности — поиск и вывод результатов."""
+async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка выбора дистанции по кнопке — запуск поиска и вывод результатов."""
     query = update.callback_query
+    if not query:
+        return ConversationHandler.END
     await query.answer()
 
-    if not query.data or not query.data.startswith("surface:"):
+    if not query.data or not query.data.startswith("distance:"):
         return ConversationHandler.END
 
-    surface_type = query.data.replace("surface:", "")
+    key = query.data.replace("distance:", "").strip()
+    distance = DISTANCE_KM_BY_KEY.get(key)
+    if distance is None:
+        await query.edit_message_text("Неизвестный вариант дистанции. Нажмите «Найти маршрут» для нового поиска.")
+        return ConversationHandler.END
+
+    context.user_data["search_distance"] = distance
     start_lon = context.user_data.get("search_start_lon")
     start_lat = context.user_data.get("search_start_lat")
-    distance = context.user_data.get("search_distance")
 
-    if start_lon is None or start_lat is None or distance is None:
+    if start_lon is None or start_lat is None:
         await query.edit_message_text("Сессия поиска истекла. Нажмите «Найти маршрут» для нового поиска.")
         return ConversationHandler.END
 
@@ -195,11 +186,9 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             start_lon=start_lon,
             start_lat=start_lat,
             distance_km=distance,
-            surface_type=surface_type,
         )
         result_text = _format_routes_list(routes)
     except ValueError as e:
-        # Нет ORS ключа — сервис выбросит ValueError с сообщением
         result_text = str(e) + "\n\nНажмите «Найти маршрут» для нового поиска."
     except httpx.TimeoutException:
         logger.warning("Timeout при поиске маршрутов для (%.4f, %.4f)", start_lon, start_lat)
@@ -236,7 +225,6 @@ async def surface_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         disable_web_page_preview=True,
     )
 
-    # Очистка данных поиска
     context.user_data.pop("search_start_lon", None)
     context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
@@ -275,10 +263,7 @@ def get_search_conversation_handler() -> ConversationHandler:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, location_text_handler),
             ],
             DISTANCE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, distance_handler),
-            ],
-            SURFACE: [
-                CallbackQueryHandler(surface_callback, pattern=r"^surface:"),
+                CallbackQueryHandler(distance_callback, pattern=r"^distance:"),
             ],
         },
         fallbacks=[

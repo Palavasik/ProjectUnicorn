@@ -56,8 +56,13 @@ class Route:
         distance_m = summary.get("distance", 0)
         distance_km = round(distance_m / 1000, 1)
 
-        direction_labels = {"north": "север", "east": "восток", "south": "юг", "west": "запад"}
-        dir_label = direction_labels.get(direction, "")
+        direction_labels = {
+            "north": "север", "east": "восток", "south": "юг", "west": "запад",
+            "north_east": "северо-восток", "south_east": "юго-восток",
+            "south_west": "юго-запад", "north_west": "северо-запад",
+            "north_north_east": "север-северо-восток", "east_south_east": "восток-юго-восток",
+        }
+        dir_label = direction_labels.get(direction, direction.replace("_", "-"))
 
         name = f"Маршрут от старта ({distance_km} км)"
         if dir_label:
