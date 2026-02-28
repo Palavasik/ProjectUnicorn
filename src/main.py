@@ -62,11 +62,11 @@ def main():
             allowed_updates=Update.ALL_TYPES,
         )
     else:
-        # Локальный polling: снимаем webhook синхронно (без asyncio), чтобы не ломать event loop
-        if not webhook_url and os.getenv("PORT"):
-            logger.warning(
-                "WEBHOOK_URL не задан при заданном PORT — запуск в режиме polling. "
-                "Для работы на Railway добавьте переменную WEBHOOK_URL (публичный URL сервиса)."
+        # Polling: локально или на Railway без WEBHOOK_URL. Снимаем webhook, чтобы работал только polling
+        if not webhook_url and port:
+            logger.info(
+                "WEBHOOK_URL не задан — запуск в режиме polling (обновления через getUpdates). "
+                "Чтобы использовать webhook на Railway, задайте WEBHOOK_URL."
             )
         _delete_webhook_sync(settings.bot_token)
         logger.info("Бот запущен (polling)...")
