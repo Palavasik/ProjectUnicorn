@@ -4,6 +4,7 @@
 Локально: polling. На Railway: webhook.
 """
 
+import asyncio
 import logging
 import os
 from dotenv import load_dotenv
@@ -49,6 +50,12 @@ def main():
             allowed_updates=Update.ALL_TYPES,
         )
     else:
+        # Локальный polling: снимаем webhook, чтобы не было конфликта с Railway
+        async def drop_webhook():
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("Webhook снят, обновления будут приходить через polling.")
+
+        asyncio.run(drop_webhook())
         logger.info("Бот запущен (polling)...")
         application.run_polling(allowed_updates=Update.ALL_TYPES)
 
