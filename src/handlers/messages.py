@@ -15,5 +15,5 @@ async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context: Контекст бота
     """
     await update.message.reply_text(
-        "Не понимаю эту команду. Используйте /help для списка доступных команд."
+        "Не понимаю. Используйте кнопки ниже или нажмите «Помощь»."
     )

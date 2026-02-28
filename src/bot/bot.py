@@ -6,7 +6,13 @@
 import re
 from telegram.ext import CommandHandler, MessageHandler, filters
 
-from handlers.commands import BUTTON_MAIN, help_handler, start_handler
+from handlers.commands import (
+    BUTTON_CANCEL,
+    BUTTON_HELP,
+    BUTTON_MAIN,
+    help_handler,
+    start_handler,
+)
 from handlers.messages import fallback_handler
 from handlers.search import get_search_conversation_handler
 
@@ -28,10 +34,22 @@ class Bot:
         self.application.add_handler(CommandHandler("start", start_handler))
         self.application.add_handler(CommandHandler("help", help_handler))
         self.application.add_handler(get_search_conversation_handler())
-        # Кнопка «Главная» — то же, что /start
+        # Кнопки вместо слэш-команд
         self.application.add_handler(
             MessageHandler(
                 filters.Regex(f"^{re.escape(BUTTON_MAIN)}$"),
+                start_handler,
+            )
+        )
+        self.application.add_handler(
+            MessageHandler(
+                filters.Regex(f"^{re.escape(BUTTON_HELP)}$"),
+                help_handler,
+            )
+        )
+        self.application.add_handler(
+            MessageHandler(
+                filters.Regex(f"^{re.escape(BUTTON_CANCEL)}$"),
                 start_handler,
             )
         )

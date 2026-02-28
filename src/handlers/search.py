@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from handlers.commands import BUTTON_FIND, BUTTON_MAIN, start_handler
+from handlers.commands import BUTTON_CANCEL, BUTTON_FIND, BUTTON_MAIN, start_handler
 from services.route_service import route_service
 
 logger = logging.getLogger(__name__)
@@ -283,5 +283,6 @@ def get_search_conversation_handler() -> ConversationHandler:
         fallbacks=[
             CommandHandler("cancel", cancel_handler),
             MessageHandler(filters.Regex(f"^{re.escape(BUTTON_MAIN)}$"), main_button_fallback),
+            MessageHandler(filters.Regex(f"^{re.escape(BUTTON_CANCEL)}$"), cancel_handler),
         ],
     )

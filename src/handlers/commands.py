@@ -8,12 +8,17 @@ from telegram.ext import ContextTypes
 # Текст кнопок (используется в клавиатуре и в обработчиках)
 BUTTON_MAIN = "🏠 Главная"
 BUTTON_FIND = "🔍 Найти маршрут"
+BUTTON_HELP = "❓ Помощь"
+BUTTON_CANCEL = "Отмена"
 
 
 def get_main_keyboard() -> ReplyKeyboardMarkup:
     """Клавиатура с основными кнопками вместо слэш-команд."""
     return ReplyKeyboardMarkup(
-        [[BUTTON_MAIN, BUTTON_FIND]],
+        [
+            [BUTTON_MAIN, BUTTON_FIND],
+            [BUTTON_HELP, BUTTON_CANCEL],
+        ],
         resize_keyboard=True,
         is_persistent=True,
     )
@@ -50,9 +55,11 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context: Контекст бота
     """
     help_text = (
-        "📚 Кнопки и команды:\n\n"
+        "📚 Кнопки:\n\n"
         "🏠 Главная — начать работу с ботом\n"
-        "🔍 Найти маршрут — подбор маршрута (точка старта, дистанция, тип поверхности)\n\n"
-        "Команды: /start, /find, /cancel, /help"
+        "🔍 Найти маршрут — подбор маршрута (точка старта, дистанция, тип поверхности)\n"
+        "❓ Помощь — эта справка\n"
+        "Отмена — отменить поиск или вернуться на главную\n\n"
+        "Команды /start, /find, /help, /cancel тоже работают."
     )
     await update.message.reply_text(help_text)
