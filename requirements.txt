@@ -13,8 +13,11 @@ python-dotenv==1.0.0
 # Redis (опционально)
 # redis==5.0.1
 
-# HTTP requests (для OpenRouteService API; версия совместима с python-telegram-bot 20.7)
+# HTTP requests (совместима с python-telegram-bot 20.7)
 httpx~=0.25.2
+
+# OpenAI (поиск маршрутов через LLM)
+openai>=1.0.0
 
 # Logging (расширенное)
 # loguru==0.7.2

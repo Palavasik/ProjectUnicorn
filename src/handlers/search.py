@@ -5,7 +5,6 @@
 import logging
 import re
 
-import httpx
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -24,7 +23,8 @@ from telegram.ext import (
 )
 
 from handlers.commands import BUTTON_CANCEL, BUTTON_FIND, BUTTON_MAIN, start_handler
-from services.route_service import route_service
+from services.llm_route_service import LLMRouteServiceError, get_routes_from_llm
+from utils.map_links import build_yandex_route_link
 
 logger = logging.getLogger(__name__)
 
@@ -68,37 +68,26 @@ def _parse_coords(text: str) -> tuple[float, float] | None:
     return (lat, lon)
 
 
-def _format_route(route, index: int) -> str:
-    """Форматирование одного маршрута для вывода."""
-    features = ", ".join(route.features) if route.features else "—"
-    surface_label = route_service.get_surface_types().get(
-        route.surface_type, route.surface_type
-    )
-    lines = [
-        f"<b>{index}. {route.name}</b>",
-        f"   📏 {route.distance_km} км | {surface_label}",
-        f"   {route.description}",
-        f"   Особенности: {features}",
-    ]
-    if route.map_link:
-        lines.append(f"   🗺 <a href=\"{route.map_link}\">Открыть на карте</a>")
-    return "\n".join(lines)
-
-
-def _format_routes_list(routes: list) -> str:
-    """Форматирование списка маршрутов."""
+def _format_llm_routes_message(routes: list[dict]) -> tuple[str, InlineKeyboardMarkup]:
+    """
+    Текст сообщения со списком маршрутов от LLM и клавиатура с кнопкой выбора под каждым.
+    routes: [{"name", "description", "coordinates"}, ...]
+    """
     if not routes:
         return (
             "Маршруты не найдены. Попробуйте изменить точку старта или дистанцию.\n\n"
-            "Нажмите «Найти маршрут» для нового поиска."
+            "Нажмите «Найти маршрут» для нового поиска.",
+            InlineKeyboardMarkup([]),
         )
-
-    header = (
-        f"Нашёл {len(routes)} вариантов маршрутов. "
-        "У каждого указан тип поверхности (асфальт, парк, трейл, набережная).\n\n"
-    )
-    items = [_format_route(r, i + 1) for i, r in enumerate(routes)]
-    return header + "\n\n".join(items)
+    blocks = []
+    for i, r in enumerate(routes):
+        blocks.append(f"<b>{i + 1}. {r['name']}</b>\n{r['description']}")
+    text = "Вот варианты маршрутов. Нажмите кнопку под маршрутом, чтобы построить его в Яндекс.Картах.\n\n" + "\n\n".join(blocks)
+    buttons = [
+        [InlineKeyboardButton(f"Построить маршрут {i + 1} в Яндекс.Картах", callback_data=f"route_select:{i}")]
+        for i in range(len(routes))
+    ]
+    return text, InlineKeyboardMarkup(buttons)
 
 
 async def find_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -158,7 +147,7 @@ async def location_text_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обработка выбора дистанции по кнопке — запуск поиска и вывод результатов."""
+    """Обработка выбора дистанции по кнопке — вызов LLM и вывод маршрутов с кнопками."""
     query = update.callback_query
     if not query:
         return ConversationHandler.END
@@ -174,43 +163,20 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return ConversationHandler.END
 
     context.user_data["search_distance"] = distance
-    start_lon = context.user_data.get("search_start_lon")
     start_lat = context.user_data.get("search_start_lat")
+    start_lon = context.user_data.get("search_start_lon")
 
     if start_lon is None or start_lat is None:
         await query.edit_message_text("Сессия поиска истекла. Нажмите «Найти маршрут» для нового поиска.")
         return ConversationHandler.END
 
     try:
-        routes = route_service.search(
-            start_lon=start_lon,
-            start_lat=start_lat,
-            distance_km=distance,
-        )
-        result_text = _format_routes_list(routes)
-    except ValueError as e:
+        routes = get_routes_from_llm(lat=start_lat, lon=start_lon, distance_km=distance)
+        context.user_data["search_routes"] = routes
+        result_text, reply_markup = _format_llm_routes_message(routes)
+    except LLMRouteServiceError as e:
         result_text = str(e) + "\n\nНажмите «Найти маршрут» для нового поиска."
-    except httpx.TimeoutException:
-        logger.warning("Timeout при поиске маршрутов для (%.4f, %.4f)", start_lon, start_lat)
-        result_text = (
-            "Сервис маршрутизации не ответил вовремя. "
-            "Попробуйте позже или измените параметры поиска.\n\n"
-            "Нажмите «Найти маршрут» для нового поиска."
-        )
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 429:
-            result_text = (
-                "Превышен лимит запросов к сервису маршрутов. "
-                "Попробуйте через несколько минут.\n\n"
-                "Нажмите «Найти маршрут» для нового поиска."
-            )
-        else:
-            result_text = (
-                "Временная ошибка сервиса маршрутов. "
-                "Попробуйте позже.\n\n"
-                "Нажмите «Найти маршрут» для нового поиска."
-            )
-        logger.error("ORS HTTP error: %s", e)
+        reply_markup = InlineKeyboardMarkup([])
     except Exception as e:
         logger.exception("Ошибка поиска маршрутов: %s", e)
         result_text = (
@@ -218,11 +184,13 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "или повторить позже.\n\n"
             "Нажмите «Найти маршрут» для нового поиска."
         )
+        reply_markup = InlineKeyboardMarkup([])
 
     await query.edit_message_text(
         result_text,
         parse_mode="HTML",
         disable_web_page_preview=True,
+        reply_markup=reply_markup,
     )
 
     context.user_data.pop("search_start_lon", None)
@@ -237,6 +205,7 @@ async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data.pop("search_start_lon", None)
     context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
+    context.user_data.pop("search_routes", None)
     await update.message.reply_text("Поиск отменён. Нажмите «Найти маршрут» для нового поиска.")
     return ConversationHandler.END
 
@@ -246,8 +215,40 @@ async def main_button_fallback(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.pop("search_start_lon", None)
     context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
+    context.user_data.pop("search_routes", None)
     await start_handler(update, context)
     return ConversationHandler.END
+
+
+async def route_select_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка нажатия «Построить маршрут в Яндекс.Картах» — отправка ссылки по координатам."""
+    query = update.callback_query
+    if not query:
+        return
+    await query.answer()
+
+    if not query.data or not query.data.startswith("route_select:"):
+        return
+
+    try:
+        index = int(query.data.replace("route_select:", "").strip())
+    except ValueError:
+        return
+
+    routes = context.user_data.get("search_routes")
+    if not routes or index < 0 or index >= len(routes):
+        await query.edit_message_text("Сессия истекла. Нажмите «Найти маршрут» для нового поиска.")
+        context.user_data.pop("search_routes", None)
+        return
+
+    route = routes[index]
+    url = build_yandex_route_link(route["coordinates"])
+    await query.edit_message_text(
+        f"<b>{route['name']}</b>\n\n"
+        f"Построить маршрут в Яндекс.Картах:\n<a href=\"{url}\">Открыть маршрут</a>",
+        parse_mode="HTML",
+    )
+    context.user_data.pop("search_routes", None)
 
 
 def get_search_conversation_handler() -> ConversationHandler:

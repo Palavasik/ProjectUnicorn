@@ -25,12 +25,14 @@
        ▼
 ┌─────────────┐
 │  Services   │
+│ LLM Route   │
 │ RouteService│
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
 │   Storage   │
+│ prompt file │
 │ routes.json │
 │ user_data   │
 └─────────────┘
@@ -39,16 +41,17 @@
 ## Поток поиска маршрута
 
 ```
-/find → [Точка старта: геолокация/координаты] → [Выбор дистанции: 3 кнопки] → Результаты (до 10 вариантов с типом поверхности у каждого)
+/find → [Точка старта: геолокация/координаты] → [Выбор дистанции: 3 кнопки] → вызов OpenAI с промптом из проекта → список маршрутов (название, описание) + под каждым кнопка «Построить маршрут в Яндекс.Картах» → по нажатию: ссылка на Яндекс.Карты с координатами маршрута
 ```
 
-Состояния диалога: `LOCATION` → `DISTANCE` → `END`. Дистанция выбирается кнопками: короткая (3–5 км), ежедневная (10 км), длинная (18–20 км).
+Состояния диалога: `LOCATION` → `DISTANCE` → `END`. Дистанция — кнопки: короткая (3–5 км), ежедневная (10 км), длинная (18–20 км). Промпт для LLM хранится в `config/prompts/route_search.txt` (или путь из `ROUTE_PROMPT_PATH`).
 
 ## Технологический стек MVP
 
 - **Язык**: Python 3.10+
 - **Фреймворк**: python-telegram-bot 20.7
-- **Данные маршрутов**: OpenRouteService API (при API-ключе) или JSON (`data/routes.json`) как fallback
+- **Поиск маршрутов**: OpenAI (Chat Completions), промпт из файла проекта
+- **Карты**: ссылки на Яндекс.Карты (rtext=координаты)
 - **Состояние диалога**: in-memory (`context.user_data`)
 - **Логирование**: logging (стандартная библиотека)
 
@@ -61,20 +64,18 @@
 
 ### Handlers (`src/handlers/`)
 - **commands.py** — `/start`, `/help`
-- **search.py** — `/find`, ConversationHandler (стартовая точка, дистанция → до 10 маршрутов с типом поверхности у каждого), `/cancel`
+- **search.py** — `/find`, ConversationHandler (стартовая точка, дистанция → вызов LLM → маршруты с кнопкой «Построить в Яндекс.Картах»), обработчик `route_select` для ссылки на карты, `/cancel`
 - **messages.py** — fallback для неизвестных сообщений
 
 ### Services (`src/services/`)
-- **route_service.py** — поиск маршрутов по точке старта (lon, lat): ORS Directions от заданных координат
-- **openroute_service.py** — клиент OpenRouteService (геокодинг, Directions foot-walking, парсинг surface)
+- **llm_route_service.py** — вызов OpenAI с промптом из файла (подстановка lat, lon, distance_km), парсинг JSON-ответа с маршрутами (name, description, coordinates)
+- **route_service.py** — загрузка маршрутов из JSON (fallback)
 
 ### Models (`src/models/`)
-- **route.py** — dataclass Route (id, city, name, distance_km, surface_type, description, features, map_link)
+- **route.py** — dataclass Route (для JSON), LLMRoute (name, description, coordinates)
 
 ### Utils (`src/utils/`)
-- Вспомогательные функции
-- Утилиты форматирования
-- Константы
+- **map_links.py** — `build_yandex_route_link(coordinates)` (Яндекс.Карты rtext), `build_route_map_link` (geojson.io)
 
 ### Структура `data/routes.json`
 

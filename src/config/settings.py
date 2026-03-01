@@ -4,28 +4,37 @@
 """
 
 import os
+from pathlib import Path
 from typing import Optional
+
+
+def _project_root() -> Path:
+    """Корень проекта (родитель каталога src)."""
+    return Path(__file__).resolve().parent.parent.parent
 
 
 class Settings:
     """Класс для управления настройками приложения."""
-    
+
     def __init__(self):
         """Инициализация настроек из переменных окружения."""
         self.bot_token: Optional[str] = os.getenv("BOT_TOKEN")
         self.debug: bool = os.getenv("DEBUG", "False").lower() == "true"
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO")
-        
+
         # Database settings
         self.database_url: Optional[str] = os.getenv("DATABASE_URL")
-        
+
         # Redis settings (опционально)
         self.redis_host: Optional[str] = os.getenv("REDIS_HOST")
         self.redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
         self.redis_db: int = int(os.getenv("REDIS_DB", "0"))
 
-        # OpenRouteService (маршрутизация)
-        self.ors_api_key: Optional[str] = os.getenv("OPENROUTESERVICE_API_KEY")
+        # OpenAI (поиск маршрутов через LLM)
+        self.openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
+        self.openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        _default_prompt = _project_root() / "config" / "prompts" / "route_search.txt"
+        self.route_prompt_path: str = os.getenv("ROUTE_PROMPT_PATH", str(_default_prompt))
 
         # Railway / webhook
         self.port: int = int(os.getenv("PORT", "0"))

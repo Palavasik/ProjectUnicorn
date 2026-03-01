@@ -2,7 +2,7 @@
 
 ## Описание
 
-**Project Unicorn** — Telegram-бот для бегунов-любителей. Помогает быстро найти подходящее место для бега в незнакомом городе: подбор маршрутов по дистанции и типу поверхности (парк, набережная, трейл, асфальт).
+**Project Unicorn** — Telegram-бот для бегунов-любителей. Помогает быстро найти маршруты для бега от вашей точки: по геолокации и выбранной дистанции LLM предлагает варианты маршрутов; по нажатию кнопки открывается построение маршрута в Яндекс.Картах.
 
 *«Найти, где побегать в незнакомом городе — быстро и по своим правилам»*
 
@@ -26,8 +26,8 @@ source venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
 
 cp .env.example .env
-# Добавьте BOT_TOKEN в .env
-# Опционально: OPENROUTESERVICE_API_KEY для динамических маршрутов (иначе — JSON)
+# Добавьте BOT_TOKEN и OPENAI_API_KEY в .env
+# Промпт для LLM: config/prompts/route_search.txt (или ROUTE_PROMPT_PATH)
 ```
 
 ### Запуск (локально)
@@ -43,7 +43,7 @@ python src/main.py
 1. Создайте проект на [Railway](https://railway.app) и подключите репозиторий.
 2. В **Variables** задайте:
    - `BOT_TOKEN` — токен от [@BotFather](https://t.me/BotFather)
-   - `OPENROUTESERVICE_API_KEY` — (опционально) ключ ORS
+   - `OPENAI_API_KEY` — ключ OpenAI для поиска маршрутов через LLM
    - `WEBHOOK_URL` — публичный URL сервиса (Railway → Settings → Generate Domain; например `https://your-app.up.railway.app`)
 3. `PORT` и домен Railway задаются автоматически.
 4. Деплой по push в ветку; бот запустится в режиме webhook.
@@ -55,7 +55,7 @@ python src/main.py
 | Команда | Описание |
 |---------|----------|
 | `/start` | Приветствие и описание возможностей |
-| `/find` | Найти маршрут (город → дистанция → тип поверхности) |
+| `/find` | Найти маршрут (точка старта → дистанция → маршруты от LLM → ссылка на Яндекс.Карты) |
 | `/cancel` | Отменить текущий поиск |
 | `/help` | Список команд |
 
@@ -73,7 +73,7 @@ ProjectUnicorn/
 ├── src/
 │   ├── bot/               # Инициализация бота
 │   ├── handlers/          # commands, search, messages
-│   ├── services/          # route_service
+│   ├── services/          # llm_route_service, route_service
 │   ├── models/            # Route
 │   └── main.py            # Точка входа
 ├── tests/
