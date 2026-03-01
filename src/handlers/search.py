@@ -252,10 +252,15 @@ async def main_button_fallback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 def get_search_conversation_handler() -> ConversationHandler:
     """Создать ConversationHandler для поиска маршрутов."""
+    # Кнопка «Найти маршрут»: точное совпадение или подстрока (на случай отличий в клиенте)
     return ConversationHandler(
         entry_points=[
             CommandHandler("find", find_handler),
-            MessageHandler(filters.Regex(f"^{re.escape(BUTTON_FIND)}$"), find_handler),
+            MessageHandler(
+                filters.TEXT
+                & (filters.Regex(f"^{re.escape(BUTTON_FIND)}$") | filters.Regex("Найти маршрут")),
+                find_handler,
+            ),
         ],
         states={
             LOCATION: [
