@@ -5,6 +5,8 @@
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from services.supabase_client import upsert_user
+
 # Текст кнопок (используется в клавиатуре и в обработчиках)
 BUTTON_MAIN = "🏠 Главная"
 BUTTON_FIND = "🔍 Найти маршрут"
@@ -24,6 +26,17 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def get_start_message(user) -> str:
+    """Текст приветствия для главного меню (для start_handler и callback «В начало»)."""
+    return (
+        f"Привет, {user.first_name}!\n\n"
+        "Я Project Unicorn — помогу найти место для бега в незнакомом городе.\n\n"
+        "Быстро подберу маршруты под дистанцию от вашей точки. "
+        "(парк, набережная, трейл, асфальт).\n\n"
+        "Нажмите кнопку ниже, чтобы начать поиск."
+    )
+
+
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Обработчик команды /start и кнопки «Главная».
@@ -33,16 +46,16 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context: Контекст бота
     """
     user = update.effective_user
-    welcome_message = (
-        f"Привет, {user.first_name}!\n\n"
-        "Я Project Unicorn — помогу найти место для бега в незнакомом городе.\n\n"
-        "Быстро подберу маршруты под дистанцию от вашей точки. "
-        "(парк, набережная, трейл, асфальт).\n\n"
-        "Нажмите кнопку ниже, чтобы начать поиск."
-    )
     await update.message.reply_text(
-        welcome_message,
+        get_start_message(user),
         reply_markup=get_main_keyboard(),
+    )
+    # Сохранение/обновление пользователя в Supabase (после ответа, без блокировки)
+    upsert_user(
+        telegram_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
     )
 
 

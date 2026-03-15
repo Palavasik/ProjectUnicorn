@@ -14,7 +14,11 @@ from handlers.commands import (
     start_handler,
 )
 from handlers.messages import fallback_handler
-from handlers.search import get_search_conversation_handler, route_select_callback
+from handlers.search import (
+    feedback_callback,
+    get_search_conversation_handler,
+    route_select_callback,
+)
 
 
 class Bot:
@@ -36,6 +40,9 @@ class Bot:
         self.application.add_handler(get_search_conversation_handler())
         self.application.add_handler(
             CallbackQueryHandler(route_select_callback, pattern=r"^route_select:")
+        )
+        self.application.add_handler(
+            CallbackQueryHandler(feedback_callback, pattern=r"^feedback:")
         )
         # Кнопки вместо слэш-команд
         self.application.add_handler(

@@ -45,10 +45,11 @@ python src/main.py
    - `BOT_TOKEN` — токен от [@BotFather](https://t.me/BotFather)
    - `OPENAI_API_KEY` — ключ OpenAI для поиска маршрутов через LLM
    - `WEBHOOK_URL` — публичный URL сервиса (Railway → Settings → Generate Domain; например `https://your-app.up.railway.app`)
+   - `SUPABASE_URL` и `SUPABASE_SERVICE_KEY` — для хранения пользователей и обратной связи (см. [Развёртка Supabase + Railway](docs/DEPLOY_SUPABASE_RAILWAY.md))
 3. `PORT` и домен Railway задаются автоматически.
 4. Деплой по push в ветку; бот запустится в режиме webhook.
 
-Файлы для Railway: `Procfile`, `runtime.txt`, `railway.json`.
+Файлы для Railway: `Procfile`, `runtime.txt`, `railway.json`. Полный пошаговый сценарий развёртки (Supabase + Railway): [docs/DEPLOY_SUPABASE_RAILWAY.md](docs/DEPLOY_SUPABASE_RAILWAY.md).
 
 ### Команды бота
 
@@ -90,6 +91,8 @@ ProjectUnicorn/
 - [API документация](docs/api/README.md)
 - [Настройка GitHub и релизов](docs/GITHUB_SETUP.md)
 - [Руководство по разработке](docs/DEVELOPMENT.md)
+- [Развёртка Supabase + Railway](docs/DEPLOY_SUPABASE_RAILWAY.md)
+- [Что делать дальше (план с минимальным вмешательством)](docs/NEXT_STEPS.md)
 
 ## 🔗 Подключение к GitHub
 

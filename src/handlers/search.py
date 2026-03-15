@@ -22,8 +22,16 @@ from telegram.ext import (
     filters,
 )
 
-from handlers.commands import BUTTON_CANCEL, BUTTON_FIND, BUTTON_MAIN, start_handler
+from handlers.commands import (
+    BUTTON_CANCEL,
+    BUTTON_FIND,
+    BUTTON_MAIN,
+    get_main_keyboard,
+    get_start_message,
+    start_handler,
+)
 from services.llm_route_service import LLMRouteServiceError, get_routes_from_llm
+from services.supabase_client import insert_feedback
 from utils.map_links import build_yandex_route_link
 
 logger = logging.getLogger(__name__)
@@ -39,13 +47,49 @@ DISTANCE_OPTIONS = [
 ]
 DISTANCE_KM_BY_KEY = {key: km for key, _label, km in DISTANCE_OPTIONS}
 
+# Обратная связь после выбора маршрута: (оценка, подпись кнопки)
+FEEDBACK_OPTIONS = [(5, "Отлично"), (3, "Норм"), (1, "Не зашло")]
+
+
+def _get_feedback_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура оценки маршрута (оценка 1–5 и «Пропустить»)."""
+    buttons = [
+        [InlineKeyboardButton(label, callback_data=f"feedback:{rating}")]
+        for rating, label in FEEDBACK_OPTIONS
+    ]
+    buttons.append([InlineKeyboardButton("Пропустить", callback_data="feedback:skip")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def _get_location_request_content() -> tuple[str, ReplyKeyboardMarkup]:
+    """Текст и клавиатура запроса точки старта (геолокация + «Назад»)."""
+    text = (
+        "Отправьте геолокацию кнопкой ниже (на телефоне) или введите координаты вручную: широта, долгота\n"
+        "Например: 55.7558, 37.6173\n\n"
+        "В десктопной или веб-версии Telegram кнопка может не работать — тогда введите координаты текстом."
+    )
+    keyboard = [
+        [KeyboardButton("Отправить геолокацию", request_location=True)],
+        [KeyboardButton("Назад")],
+    ]
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        one_time_keyboard=True,
+        resize_keyboard=True,
+    )
+    return text, reply_markup
+
 
 def _get_distance_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора дистанции (три кнопки)."""
+    """Клавиатура выбора дистанции (три кнопки + «Назад» и «В начало»)."""
     buttons = [
         [InlineKeyboardButton(label, callback_data=f"distance:{key}")]
         for key, label, _km in DISTANCE_OPTIONS
     ]
+    buttons.append([
+        InlineKeyboardButton("← Назад", callback_data="search_back:location"),
+        InlineKeyboardButton("В начало", callback_data="search_back:start"),
+    ])
     return InlineKeyboardMarkup(buttons)
 
 # Regex для координат: lat, lon (разделитель запятая, точка с запятой или пробел)
@@ -92,18 +136,8 @@ def _format_llm_routes_message(routes: list[dict]) -> tuple[str, InlineKeyboardM
 
 async def find_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Старт сценария поиска — запрос стартовой точки (геолокация или координаты)."""
-    keyboard = [[KeyboardButton("Отправить геолокацию", request_location=True)]]
-    reply_markup = ReplyKeyboardMarkup(
-        keyboard,
-        one_time_keyboard=True,
-        resize_keyboard=True,
-    )
-    await update.message.reply_text(
-        "Отправьте геолокацию кнопкой ниже (на телефоне) или введите координаты вручную: широта, долгота\n"
-        "Например: 55.7558, 37.6173\n\n"
-        "В десктопной или веб-версии Telegram кнопка может не работать — тогда введите координаты текстом.",
-        reply_markup=reply_markup,
-    )
+    text, reply_markup = _get_location_request_content()
+    await update.message.reply_text(text, reply_markup=reply_markup)
     return LOCATION
 
 
@@ -126,14 +160,11 @@ async def location_text_handler(update: Update, context: ContextTypes.DEFAULT_TY
     text = update.message.text.strip()
     coords = _parse_coords(text)
     if coords is None:
+        text, reply_markup = _get_location_request_content()
         await update.message.reply_text(
             "Неверный формат. Введите координаты: широта, долгота (например: 55.7558, 37.6173).\n"
             "На телефоне можно нажать «Отправить геолокацию».",
-            reply_markup=ReplyKeyboardMarkup(
-                [[KeyboardButton("Отправить геолокацию", request_location=True)]],
-                one_time_keyboard=True,
-                resize_keyboard=True,
-            ),
+            reply_markup=reply_markup,
         )
         return LOCATION
     lat, lon = coords
@@ -195,7 +226,7 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     context.user_data.pop("search_start_lon", None)
     context.user_data.pop("search_start_lat", None)
-    context.user_data.pop("search_distance", None)
+    # search_distance не удаляем — понадобится для обратной связи после выбора маршрута
 
     return ConversationHandler.END
 
@@ -206,6 +237,8 @@ async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
     context.user_data.pop("search_routes", None)
+    context.user_data.pop("feedback_route_name", None)
+    context.user_data.pop("feedback_distance_km", None)
     await update.message.reply_text("Поиск отменён. Нажмите «Найти маршрут» для нового поиска.")
     return ConversationHandler.END
 
@@ -216,6 +249,8 @@ async def main_button_fallback(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.pop("search_start_lat", None)
     context.user_data.pop("search_distance", None)
     context.user_data.pop("search_routes", None)
+    context.user_data.pop("feedback_route_name", None)
+    context.user_data.pop("feedback_distance_km", None)
     await start_handler(update, context)
     return ConversationHandler.END
 
@@ -248,7 +283,79 @@ async def route_select_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"Построить маршрут в Яндекс.Картах:\n<a href=\"{url}\">Открыть маршрут</a>",
         parse_mode="HTML",
     )
+    # Сохраняем данные для сбора обратной связи
+    context.user_data["feedback_route_name"] = route["name"]
+    context.user_data["feedback_distance_km"] = context.user_data.get("search_distance")
     context.user_data.pop("search_routes", None)
+    # Запрос оценки
+    await query.message.reply_text(
+        "Как вам маршрут?",
+        reply_markup=_get_feedback_keyboard(),
+    )
+
+
+async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка нажатия кнопки оценки маршрута или «Пропустить»."""
+    query = update.callback_query
+    if not query or not query.data or not query.data.startswith("feedback:"):
+        return
+    await query.answer()
+
+    route_name = context.user_data.pop("feedback_route_name", None)
+    distance_km = context.user_data.pop("feedback_distance_km", None)
+    context.user_data.pop("search_distance", None)
+
+    suffix = query.data.replace("feedback:", "").strip()
+    if suffix == "skip":
+        await query.edit_message_text("Ок, удачных пробежек!")
+        return
+
+    try:
+        rating = int(suffix)
+    except ValueError:
+        await query.edit_message_text("Спасибо!")
+        return
+
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id and route_name:
+        insert_feedback(
+            telegram_user_id=user_id,
+            route_name=route_name,
+            rating=rating,
+            distance_km=distance_km,
+        )
+    await query.edit_message_text("Спасибо за отзыв!")
+
+
+async def search_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка «Назад» / «В начало» на шаге DISTANCE."""
+    query = update.callback_query
+    if not query or not query.data or not query.data.startswith("search_back:"):
+        return ConversationHandler.END
+    await query.answer()
+
+    suffix = query.data.replace("search_back:", "").strip()
+    if suffix == "start":
+        for key in ("search_start_lat", "search_start_lon", "search_distance", "search_routes", "feedback_route_name", "feedback_distance_km"):
+            context.user_data.pop(key, None)
+        await query.message.reply_text(
+            get_start_message(update.effective_user),
+            reply_markup=get_main_keyboard(),
+        )
+        return ConversationHandler.END
+    if suffix == "location":
+        text, reply_markup = _get_location_request_content()
+        await query.message.reply_text(text, reply_markup=reply_markup)
+        return LOCATION
+    return ConversationHandler.END
+
+
+async def _back_to_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Кнопка «Назад» на шаге LOCATION — выход в главное меню."""
+    for key in ("search_start_lat", "search_start_lon", "search_distance", "search_routes", "feedback_route_name", "feedback_distance_km"):
+        context.user_data.pop(key, None)
+    await start_handler(update, context)
+    return ConversationHandler.END
 
 
 def get_search_conversation_handler() -> ConversationHandler:
@@ -265,11 +372,13 @@ def get_search_conversation_handler() -> ConversationHandler:
         ],
         states={
             LOCATION: [
+                MessageHandler(filters.Regex("^Назад$"), _back_to_start_handler),
                 MessageHandler(filters.LOCATION, location_handler),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, location_text_handler),
             ],
             DISTANCE: [
                 CallbackQueryHandler(distance_callback, pattern=r"^distance:"),
+                CallbackQueryHandler(search_back_callback, pattern=r"^search_back:"),
             ],
         },
         fallbacks=[

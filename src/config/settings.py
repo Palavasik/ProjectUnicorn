@@ -1,6 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-Настройки приложения.
-Загрузка и управление конфигурацией.
+Application settings and configuration.
 """
 
 import os
@@ -35,6 +35,10 @@ class Settings:
         self.openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         _default_prompt = _project_root() / "config" / "prompts" / "route_search.txt"
         self.route_prompt_path: str = os.getenv("ROUTE_PROMPT_PATH", str(_default_prompt))
+
+        # Supabase (пользователи и обратная связь)
+        self.supabase_url: Optional[str] = os.getenv("SUPABASE_URL")
+        self.supabase_service_key: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY")
 
         # Railway / webhook
         self.port: int = int(os.getenv("PORT", "0"))

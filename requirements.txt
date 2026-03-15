@@ -4,11 +4,10 @@ python-telegram-bot[webhooks]==20.7
 # Environment variables
 python-dotenv==1.0.0
 
-# Database (раскомментируйте нужное)
-# SQLite (встроен в Python)
-# PostgreSQL
-# psycopg2-binary==2.9.9
-# SQLAlchemy==2.0.23
+# Database (ORM + миграции при старте)
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+psycopg2-binary>=2.9.9
 
 # Redis (опционально)
 # redis==5.0.1
@@ -18,6 +17,9 @@ httpx~=0.25.2
 
 # OpenAI (поиск маршрутов через LLM)
 openai>=1.0.0
+
+# Supabase (пользователи и обратная связь)
+supabase>=2.0.0
 
 # Logging (расширенное)
 # loguru==0.7.2

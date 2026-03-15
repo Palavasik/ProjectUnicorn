@@ -13,6 +13,7 @@ from telegram.ext import Application
 
 from bot.bot import Bot
 from config.settings import Settings
+from db.migrations import run_migrations
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -40,6 +41,9 @@ def _delete_webhook_sync(bot_token: str) -> None:
 def main():
     """Основная функция запуска бота."""
     settings = Settings()
+
+    if settings.database_url:
+        run_migrations()
 
     if not settings.bot_token:
         logger.error("BOT_TOKEN не найден в переменных окружения!")
