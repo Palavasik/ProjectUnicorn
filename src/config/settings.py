@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from utils.database_url import normalize_database_url
+
 
 def _project_root() -> Path:
     """Корень проекта (родитель каталога src)."""
@@ -22,8 +24,10 @@ class Settings:
         self.debug: bool = os.getenv("DEBUG", "False").lower() == "true"
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO")
 
-        # Database settings
-        self.database_url: Optional[str] = os.getenv("DATABASE_URL")
+        # Database settings (IPv4 hostaddr для db.*.supabase.co на Railway без IPv6)
+        self.database_url: Optional[str] = normalize_database_url(
+            os.getenv("DATABASE_URL")
+        )
 
         # Redis settings (опционально)
         self.redis_host: Optional[str] = os.getenv("REDIS_HOST")

@@ -17,9 +17,10 @@ load_dotenv(project_root / ".env")
 sys.path.insert(0, str(project_root / "src"))
 
 from db.models import Base
+from utils.database_url import normalize_database_url
 
 config = context.config
-url = os.getenv("DATABASE_URL")
+url = normalize_database_url(os.getenv("DATABASE_URL"))
 if not url:
     raise RuntimeError("DATABASE_URL не задан. Задайте в .env или переменных окружения.")
 config.set_main_option("sqlalchemy.url", url)

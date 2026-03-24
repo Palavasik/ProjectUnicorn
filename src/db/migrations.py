@@ -16,9 +16,13 @@ def run_migrations() -> bool:
     Выполнить alembic upgrade head.
     Возвращает True при успехе, False при отсутствии DATABASE_URL или ошибке.
     """
-    if not os.getenv("DATABASE_URL"):
+    raw_url = os.getenv("DATABASE_URL")
+    if not raw_url:
         logger.info("DATABASE_URL не задан — миграции пропущены.")
         return False
+    from utils.database_url import normalize_database_url
+
+    os.environ["DATABASE_URL"] = normalize_database_url(raw_url) or raw_url
     project_root = Path(__file__).resolve().parent.parent.parent
     alembic_ini = project_root / "alembic.ini"
     if not alembic_ini.exists():

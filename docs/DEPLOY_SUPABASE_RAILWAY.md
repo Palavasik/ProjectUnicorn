@@ -53,6 +53,8 @@
 
 4. Сохраните переменные. Railway автоматически выполнит редеплой.
 
+**IPv6 и Railway:** если в логах `connection to server at "db....supabase.co" (...IPv6...) failed: Network is unreachable`, контейнер Railway не доходит до Supabase по IPv6. Варианты: (1) в **Connection string** взять **Session pooler** или **Transaction pooler** (хост вида `aws-0-....pooler.supabase.com`, порт **6543** для transaction mode) вместо прямого `db....supabase.co`; (2) обновить код бота — при старте для прямого хоста `db.*.supabase.co` автоматически подставляется `hostaddr` с IPv4 из DNS.
+
 ### 2.2 Проверка деплоя
 
 Убедитесь, что сервис успешно запустился (логи без ошибок). При заданном `DATABASE_URL` в логах должно быть сообщение о применении миграций. Если заданы только `SUPABASE_URL` и `SUPABASE_SERVICE_KEY`, пользователи и отзывы сохраняются через REST API.
