@@ -34,9 +34,13 @@ class Settings:
         self.redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
         self.redis_db: int = int(os.getenv("REDIS_DB", "0"))
 
-        # OpenAI (поиск маршрутов через LLM)
-        self.openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
-        self.openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        # OpenRouter (поиск маршрутов через LLM; OpenAI-совместимый API)
+        self.openrouter_api_key: Optional[str] = os.getenv("OPENROUTER_API_KEY")
+        _orb = (os.getenv("OPENROUTER_BASE_URL") or "").strip()
+        self.openrouter_base_url: str = _orb or "https://openrouter.ai/api/v1"
+        self.openrouter_model: str = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+        self.openrouter_app_title: str = os.getenv("OPENROUTER_APP_TITLE", "Project Unicorn")
+        self.openrouter_http_referer: Optional[str] = os.getenv("OPENROUTER_HTTP_REFERER")
         _default_prompt = _project_root() / "config" / "prompts" / "route_search.txt"
         self.route_prompt_path: str = os.getenv("ROUTE_PROMPT_PATH", str(_default_prompt))
 

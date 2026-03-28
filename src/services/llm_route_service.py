@@ -1,5 +1,5 @@
 """
-Сервис поиска маршрутов через OpenAI.
+Сервис поиска маршрутов через OpenRouter (OpenAI-совместимый API).
 Читает промпт из файла, подставляет параметры, вызывает LLM и парсит JSON-ответ.
 """
 
@@ -76,8 +76,8 @@ def get_routes_from_llm(
         lon: Долгота старта
         distance_km: Желаемая дистанция в км
         prompt_path: Путь к файлу промпта (по умолчанию из настроек)
-        api_key: OpenAI API key (по умолчанию из настроек)
-        model: Модель OpenAI (по умолчанию из настроек)
+        api_key: Ключ OpenRouter (по умолчанию из настроек)
+        model: Имя модели на OpenRouter (по умолчанию из настроек)
 
     Returns:
         Список словарей: [{"name": str, "description": str, "coordinates": [[lat, lon], ...]}, ...]
@@ -87,13 +87,13 @@ def get_routes_from_llm(
     """
     settings = Settings()
     path = prompt_path or settings.route_prompt_path
-    key = api_key or settings.openai_api_key
-    model_name = model or settings.openai_model
+    key = api_key or settings.openrouter_api_key
+    model_name = model or settings.openrouter_model
 
     if not key:
         raise LLMRouteServiceError(
-            "Поиск маршрутов через LLM доступен только при настройке OpenAI. "
-            "Укажите OPENAI_API_KEY в настройках."
+            "Поиск маршрутов через LLM доступен только при настройке OpenRouter. "
+            "Укажите OPENROUTER_API_KEY в настройках."
         )
 
     prompt_text = _load_prompt(path)
@@ -104,9 +104,19 @@ def get_routes_from_llm(
     try:
         from openai import OpenAI
     except ImportError:
-        raise LLMRouteServiceError("Библиотека openai не установлена. Установите: pip install openai")
+        raise LLMRouteServiceError(
+            "Пакет openai не установлен. Установите: pip install openai"
+        )
 
-    client = OpenAI(api_key=key)
+    headers = {"X-Title": settings.openrouter_app_title}
+    if settings.openrouter_http_referer:
+        headers["HTTP-Referer"] = settings.openrouter_http_referer
+
+    client = OpenAI(
+        api_key=key,
+        base_url=settings.openrouter_base_url,
+        default_headers=headers,
+    )
     try:
         response = client.chat.completions.create(
             model=model_name,
@@ -114,7 +124,7 @@ def get_routes_from_llm(
             temperature=0.3,
         )
     except Exception as e:
-        logger.exception("OpenAI API error: %s", e)
+        logger.exception("OpenRouter API error: %s", e)
         raise LLMRouteServiceError(
             "Сервис маршрутов временно недоступен. Попробуйте позже."
         ) from e

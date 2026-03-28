@@ -26,7 +26,7 @@ source venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
 
 cp .env.example .env
-# Добавьте BOT_TOKEN и OPENAI_API_KEY в .env
+# Добавьте BOT_TOKEN и OPENROUTER_API_KEY в .env
 # Промпт для LLM: config/prompts/route_search.txt (или ROUTE_PROMPT_PATH)
 ```
 
@@ -43,7 +43,7 @@ python src/main.py
 1. Создайте проект на [Railway](https://railway.app) и подключите репозиторий.
 2. В **Variables** задайте:
    - `BOT_TOKEN` — токен от [@BotFather](https://t.me/BotFather)
-   - `OPENAI_API_KEY` — ключ OpenAI для поиска маршрутов через LLM
+   - `OPENROUTER_API_KEY` — ключ OpenRouter для поиска маршрутов через LLM
    - `WEBHOOK_URL` — публичный URL сервиса (Railway → Settings → Generate Domain; например `https://your-app.up.railway.app`)
    - `SUPABASE_URL` и `SUPABASE_SERVICE_KEY` — для хранения пользователей и обратной связи (см. [Развёртка Supabase + Railway](docs/DEPLOY_SUPABASE_RAILWAY.md))
 3. `PORT` и домен Railway задаются автоматически.

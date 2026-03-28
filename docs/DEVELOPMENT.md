@@ -134,6 +134,6 @@ update.message.reply_text = AsyncMock()
 ### Railway (webhook)
 
 1. Подключите репозиторий к [Railway](https://railway.app).
-2. В Variables задайте `BOT_TOKEN`, `OPENAI_API_KEY` (для поиска маршрутов через LLM), `WEBHOOK_URL` (публичный URL сервиса после генерации домена), а также `SUPABASE_URL` и `SUPABASE_SERVICE_KEY` для хранения пользователей и обратной связи.
+2. В Variables задайте `BOT_TOKEN`, `OPENROUTER_API_KEY` (для поиска маршрутов через LLM), `WEBHOOK_URL` (публичный URL сервиса после генерации домена), а также `SUPABASE_URL` и `SUPABASE_SERVICE_KEY` для хранения пользователей и обратной связи.
 3. Деплой по push; бот запускается через `Procfile` в режиме webhook.
 4. Подробнее: раздел «Деплой на Railway» в [README](../README.md). Пошаговая развёртка Supabase и настройка переменных Railway: [DEPLOY_SUPABASE_RAILWAY.md](DEPLOY_SUPABASE_RAILWAY.md).

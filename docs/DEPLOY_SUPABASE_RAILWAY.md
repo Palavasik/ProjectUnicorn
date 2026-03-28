@@ -45,7 +45,7 @@
 | Переменная | Значение | Описание |
 |------------|----------|----------|
 | `BOT_TOKEN` | Токен от @BotFather | Обязательно |
-| `OPENAI_API_KEY` | Ключ OpenAI | Обязательно |
+| `OPENROUTER_API_KEY` | Ключ OpenRouter | Обязательно для поиска маршрутов через LLM |
 | `WEBHOOK_URL` | URL сервиса (например `https://your-app.up.railway.app`) | Обязательно для webhook |
 | `DATABASE_URL` | Connection string из Supabase → Database (URI с паролем) | **Рекомендуется**: миграции при старте, не нужно вручную запускать SQL |
 | `SUPABASE_URL` | Project URL из Supabase | Нужен, если **не** задаёте `DATABASE_URL` (режим REST) |

@@ -11,7 +11,7 @@ alwaysApply: true
 
 *«Найти, где побегать в незнакомом городе — быстро и по своим правилам»*
 
-Стек: **Python 3.10+**, **python-telegram-bot 20.7**, **OpenAI** (поиск маршрутов), **Яндекс.Карты** (ссылки на маршрут).
+Стек: **Python 3.10+**, **python-telegram-bot 20.7**, **OpenRouter** (поиск маршрутов через LLM), **Яндекс.Карты** (ссылки на маршрут).
 
 ## 📁 Структура проекта
 
@@ -85,11 +85,11 @@ ProjectUnicorn/
 - `surface_type`: asphalt, park, trail, embankment
 - Данные в `data/routes.json` (UTF-8)
 
-### LLM (OpenAI)
+### LLM (OpenRouter)
 - Промпт загружается из файла (`config/prompts/route_search.txt` или `ROUTE_PROMPT_PATH`)
 - В промпт подставляются: координаты (lat, lon), дистанция (км)
 - Ответ — JSON с массивом маршрутов (name, description, coordinates)
-- При отсутствии `OPENAI_API_KEY` — сообщение пользователю и/или fallback на `routes.json`
+- При отсутствии `OPENROUTER_API_KEY` — сообщение пользователю и/или fallback на `routes.json`
 
 ### Ссылки на карты
 - `utils/map_links.py`: `build_yandex_route_link(coordinates)` — ссылка на построение маршрута в Яндекс.Картах (rtext=координаты)
@@ -118,7 +118,7 @@ refactor: вынес промпт LLM в отдельный файл
 
 ### Переменные окружения
 - **BOT_TOKEN** — токен от @BotFather (обязательно)
-- **OPENAI_API_KEY** — для поиска маршрутов через LLM (опционально; без него — сообщение и/или fallback)
+- **OPENROUTER_API_KEY** — для поиска маршрутов через LLM (опционально; без него — сообщение и/или fallback)
 - **WEBHOOK_URL** — только для Railway (публичный URL сервиса)
 - **ROUTE_PROMPT_PATH** — путь к файлу промпта (по умолчанию из конфига)
 - Секреты только в `.env`, `.env` не коммитить

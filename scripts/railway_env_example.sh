@@ -5,7 +5,7 @@
 
 # --- Обязательные ---
 # BOT_TOKEN=                    # Токен от @BotFather
-# OPENAI_API_KEY=               # Ключ API OpenAI для поиска маршрутов через LLM
+# OPENROUTER_API_KEY=           # Ключ OpenRouter для поиска маршрутов через LLM
 # WEBHOOK_URL=                  # Публичный URL сервиса (Railway → Settings → Generate Domain), например https://your-app.up.railway.app
 
 # --- База данных (рекомендуется: ORM, миграции при старте) ---
@@ -17,8 +17,11 @@
 # SUPABASE_URL=                 # https://xxxxx.supabase.co
 # SUPABASE_SERVICE_KEY=         # service_role key
 
-# --- Опционально ---
-# OPENAI_MODEL=gpt-4o-mini
+# --- Опционально (OpenRouter) ---
+# OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+# OPENROUTER_MODEL=openai/gpt-4o-mini
+# OPENROUTER_APP_TITLE=Project Unicorn
+# OPENROUTER_HTTP_REFERER=
 # ROUTE_PROMPT_PATH=config/prompts/route_search.txt
 # LOG_LEVEL=INFO
 # DEBUG=False
