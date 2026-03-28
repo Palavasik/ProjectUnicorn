@@ -26,4 +26,11 @@
 # LOG_LEVEL=INFO
 # DEBUG=False
 
+# --- Геокодирование адреса старта (опционально: Яндекс; иначе Nominatim) ---
+# GEOCODER_USER_AGENT=MyBot/1.0 (you@example.com)
+# YANDEX_GEOCODER_API_KEY=
+
+# --- Логи завершения сценария поиска в отдельный Telegram-чат (опционально) ---
+# ANALYTICS_CHAT_ID=            # id группы/канала (часто -100...); бот должен иметь право писать в чат
+
 # PORT задаётся Railway автоматически.

@@ -48,6 +48,17 @@ class Settings:
         self.supabase_url: Optional[str] = os.getenv("SUPABASE_URL")
         self.supabase_service_key: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY")
 
+        # Геокодирование адреса старта (Яндекс при ключе, иначе Nominatim)
+        self.yandex_geocoder_api_key: Optional[str] = os.getenv("YANDEX_GEOCODER_API_KEY")
+        self.geocoder_user_agent: str = os.getenv(
+            "GEOCODER_USER_AGENT",
+            "ProjectUnicornBot/1.0 (https://github.com/Palavasik/ProjectUnicorn)",
+        )
+
+        # Логи завершения сценария поиска в отдельный Telegram-чат (опционально)
+        _acid = (os.getenv("ANALYTICS_CHAT_ID") or "").strip()
+        self.analytics_chat_id: Optional[str] = _acid or None
+
         # Railway / webhook
         self.port: int = int(os.getenv("PORT", "0"))
         self.webhook_url: Optional[str] = os.getenv("WEBHOOK_URL")

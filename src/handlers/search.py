@@ -5,13 +5,13 @@
 import asyncio
 import logging
 import re
+import time
 
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
     Update,
 )
 from telegram.ext import (
@@ -23,6 +23,7 @@ from telegram.ext import (
     filters,
 )
 
+from config.settings import Settings
 from handlers.commands import (
     BUTTON_CANCEL,
     BUTTON_FIND,
@@ -31,6 +32,8 @@ from handlers.commands import (
     get_start_message,
     start_handler,
 )
+from services.analytics_telegram import log_job_completed
+from services.geocode_service import GeocodeUnavailableError, geocode_to_lat_lon
 from services.llm_route_service import LLMRouteServiceError, get_routes_from_llm
 from services.supabase_client import insert_feedback
 from utils.map_links import build_yandex_route_link
@@ -51,6 +54,27 @@ DISTANCE_KM_BY_KEY = {key: km for key, _label, km in DISTANCE_OPTIONS}
 # Обратная связь после выбора маршрута: (оценка, подпись кнопки)
 FEEDBACK_OPTIONS = [(5, "Отлично"), (3, "Норм"), (1, "Не зашло")]
 
+# Метрики сессии поиска (лог в ANALYTICS_CHAT_ID)
+JOB_STARTED_AT_KEY = "job_started_at_perf"
+SEARCH_START_LABEL_KEY = "search_start_label"
+
+_SEARCH_STATE_KEYS = (
+    "search_start_lat",
+    "search_start_lon",
+    "search_distance",
+    "search_routes",
+    "feedback_route_name",
+    "feedback_distance_km",
+    JOB_STARTED_AT_KEY,
+    SEARCH_START_LABEL_KEY,
+)
+
+
+def _pop_search_state_keys(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Сброс ключей состояния сценария поиска и метрик сессии."""
+    for key in _SEARCH_STATE_KEYS:
+        context.user_data.pop(key, None)
+
 
 def _get_feedback_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура оценки маршрута (оценка 1–5 и «Пропустить»)."""
@@ -65,9 +89,10 @@ def _get_feedback_keyboard() -> InlineKeyboardMarkup:
 def _get_location_request_content() -> tuple[str, ReplyKeyboardMarkup]:
     """Текст и клавиатура запроса точки старта (геолокация + «Назад»)."""
     text = (
-        "Отправьте геолокацию кнопкой ниже (на телефоне) или введите координаты вручную: широта, долгота\n"
-        "Например: 55.7558, 37.6173\n\n"
-        "В десктопной или веб-версии Telegram кнопка может не работать — тогда введите координаты текстом."
+        "Отправьте геолокацию кнопкой ниже (на телефоне), введите координаты или адрес текстом.\n\n"
+        "Координаты: широта, долгота — например: 55.7558, 37.6173\n"
+        "Адрес: например — Москва, Красная площадь 1\n\n"
+        "В десктопной или веб-версии Telegram кнопка геолокации может не работать — тогда введите координаты или адрес текстом."
     )
     keyboard = [
         [KeyboardButton("Отправить геолокацию", request_location=True)],
@@ -136,7 +161,9 @@ def _format_llm_routes_message(routes: list[dict]) -> tuple[str, InlineKeyboardM
 
 
 async def find_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Старт сценария поиска — запрос стартовой точки (геолокация или координаты)."""
+    """Старт сценария поиска — запрос стартовой точки (геолокация, координаты или адрес)."""
+    context.user_data[JOB_STARTED_AT_KEY] = time.perf_counter()
+    context.user_data.pop(SEARCH_START_LABEL_KEY, None)
     text, reply_markup = _get_location_request_content()
     await update.message.reply_text(text, reply_markup=reply_markup)
     return LOCATION
@@ -149,6 +176,9 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return LOCATION
     context.user_data["search_start_lat"] = loc.latitude
     context.user_data["search_start_lon"] = loc.longitude
+    context.user_data[SEARCH_START_LABEL_KEY] = (
+        f"геолокация: {loc.latitude:.6f}, {loc.longitude:.6f}"
+    )
     await update.message.reply_text(
         "Точка старта принята.\n\nВыберите дистанцию:",
         reply_markup=_get_distance_keyboard(),
@@ -157,22 +187,60 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def location_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Приём координат из текста (lat, lon)."""
-    text = update.message.text.strip()
-    coords = _parse_coords(text)
-    if coords is None:
+    """Приём координат или адреса из текста."""
+    raw = update.message.text.strip()
+    coords = _parse_coords(raw)
+    if coords is not None:
+        lat, lon = coords
+        context.user_data["search_start_lat"] = lat
+        context.user_data["search_start_lon"] = lon
+        context.user_data[SEARCH_START_LABEL_KEY] = (
+            f"координаты (ввод): {raw} → {lat:.6f}, {lon:.6f}"
+        )
+        await update.message.reply_text(
+            "Точка старта принята.\n\nВыберите дистанцию:",
+            reply_markup=_get_distance_keyboard(),
+        )
+        return DISTANCE
+
+    if len(raw) < 3:
         text, reply_markup = _get_location_request_content()
         await update.message.reply_text(
-            "Неверный формат. Введите координаты: широта, долгота (например: 55.7558, 37.6173).\n"
+            "Слишком короткий запрос. Введите координаты (широта, долгота) или полный адрес.\n"
             "На телефоне можно нажать «Отправить геолокацию».",
             reply_markup=reply_markup,
         )
         return LOCATION
-    lat, lon = coords
-    context.user_data["search_start_lat"] = lat
-    context.user_data["search_start_lon"] = lon
+
+    try:
+        result = await geocode_to_lat_lon(raw)
+    except GeocodeUnavailableError:
+        logger.exception("Геокодирование недоступно для запроса")
+        text, reply_markup = _get_location_request_content()
+        await update.message.reply_text(
+            "Сервис геокодирования временно недоступен. Попробуйте позже или введите координаты вручную.\n"
+            "На телефоне можно нажать «Отправить геолокацию».",
+            reply_markup=reply_markup,
+        )
+        return LOCATION
+
+    if result is None:
+        text, reply_markup = _get_location_request_content()
+        await update.message.reply_text(
+            "Адрес не найден. Уточните формулировку или введите координаты: широта, долгота "
+            "(например: 55.7558, 37.6173).\n"
+            "На телефоне можно нажать «Отправить геолокацию».",
+            reply_markup=reply_markup,
+        )
+        return LOCATION
+
+    context.user_data["search_start_lat"] = result.lat
+    context.user_data["search_start_lon"] = result.lon
+    context.user_data[SEARCH_START_LABEL_KEY] = (
+        f"адрес: {raw} → {result.display_name} ({result.lat:.6f}, {result.lon:.6f})"
+    )
     await update.message.reply_text(
-        "Точка старта принята.\n\nВыберите дистанцию:",
+        f"Точка старта: {result.display_name}\n\nВыберите дистанцию:",
         reply_markup=_get_distance_keyboard(),
     )
     return DISTANCE
@@ -202,6 +270,7 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await query.edit_message_text("Сессия поиска истекла. Нажмите «Найти маршрут» для нового поиска.")
         return ConversationHandler.END
 
+    routes: list[dict] | None = None
     try:
         routes = await asyncio.to_thread(
             get_routes_from_llm,
@@ -223,6 +292,28 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         reply_markup = InlineKeyboardMarkup([])
 
+    if routes is not None:
+        settings = Settings()
+        user = update.effective_user
+        started = context.user_data.get(JOB_STARTED_AT_KEY)
+        duration_sec = None
+        if started is not None:
+            duration_sec = time.perf_counter() - started
+        start_label = context.user_data.get(SEARCH_START_LABEL_KEY) or "—"
+        route_names = [r["name"] for r in routes]
+        if user:
+            await log_job_completed(
+                context.bot,
+                analytics_chat_id=settings.analytics_chat_id,
+                telegram_user_id=user.id,
+                username=user.username,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                start_label=start_label,
+                route_names=route_names,
+                duration_seconds=duration_sec,
+            )
+
     await query.edit_message_text(
         result_text,
         parse_mode="HTML",
@@ -232,6 +323,8 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     context.user_data.pop("search_start_lon", None)
     context.user_data.pop("search_start_lat", None)
+    context.user_data.pop(JOB_STARTED_AT_KEY, None)
+    context.user_data.pop(SEARCH_START_LABEL_KEY, None)
     # search_distance не удаляем — понадобится для обратной связи после выбора маршрута
 
     return ConversationHandler.END
@@ -239,24 +332,14 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отмена текущего диалога поиска."""
-    context.user_data.pop("search_start_lon", None)
-    context.user_data.pop("search_start_lat", None)
-    context.user_data.pop("search_distance", None)
-    context.user_data.pop("search_routes", None)
-    context.user_data.pop("feedback_route_name", None)
-    context.user_data.pop("feedback_distance_km", None)
+    _pop_search_state_keys(context)
     await update.message.reply_text("Поиск отменён. Нажмите «Найти маршрут» для нового поиска.")
     return ConversationHandler.END
 
 
 async def main_button_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Кнопка «Главная» — выход в главное меню."""
-    context.user_data.pop("search_start_lon", None)
-    context.user_data.pop("search_start_lat", None)
-    context.user_data.pop("search_distance", None)
-    context.user_data.pop("search_routes", None)
-    context.user_data.pop("feedback_route_name", None)
-    context.user_data.pop("feedback_distance_km", None)
+    _pop_search_state_keys(context)
     await start_handler(update, context)
     return ConversationHandler.END
 
@@ -344,8 +427,7 @@ async def search_back_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     suffix = query.data.replace("search_back:", "").strip()
     if suffix == "start":
-        for key in ("search_start_lat", "search_start_lon", "search_distance", "search_routes", "feedback_route_name", "feedback_distance_km"):
-            context.user_data.pop(key, None)
+        _pop_search_state_keys(context)
         await query.message.reply_text(
             get_start_message(update.effective_user),
             reply_markup=get_main_keyboard(),
@@ -360,8 +442,7 @@ async def search_back_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def _back_to_start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Кнопка «Назад» на шаге LOCATION — выход в главное меню."""
-    for key in ("search_start_lat", "search_start_lon", "search_distance", "search_routes", "feedback_route_name", "feedback_distance_km"):
-        context.user_data.pop(key, None)
+    _pop_search_state_keys(context)
     await start_handler(update, context)
     return ConversationHandler.END
 
