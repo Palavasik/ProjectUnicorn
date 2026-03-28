@@ -125,27 +125,51 @@ def truncate_for_telegram_log(text: str, max_len: int = _TELEGRAM_TEXT_MAX - 200
     return text[: max(0, max_len - 40)] + "\n… [обрезано]"
 
 
-def format_llm_response_message(*, telegram_user_id: int, raw_content: str) -> str:
+def format_llm_response_message(
+    *,
+    telegram_user_id: int,
+    prompt_text: str,
+    raw_content: str,
+    model_name: Optional[str] = None,
+) -> str:
     """
-    Текст второго сообщения в аналитику: сырой ответ LLM (HTML + моноширинный блок).
+    Текст второго сообщения в аналитику: запрос и сырой ответ LLM (HTML + два блока pre).
 
     Args:
         telegram_user_id: id пользователя (связка с первым сообщением).
+        prompt_text: Полный текст user-сообщения, отправленного в Chat Completions.
         raw_content: Полное содержимое message.content от API.
+        model_name: Имя модели OpenRouter (опционально).
 
     Returns:
         Текст для send_message с parse_mode=\"HTML\".
     """
+    # Делим лимит сообщения между запросом и ответом (заголовки ~400 символов)
+    _chunk = 1650
+    req = truncate_for_telegram_log(
+        prompt_text.strip() or "—",
+        max_len=_chunk,
+    )
     body = truncate_for_telegram_log(
         raw_content.strip() or "—",
-        max_len=_TELEGRAM_TEXT_MAX - 350,
+        max_len=_chunk,
     )
+    req_safe = _html_escape(req)
     body_safe = _html_escape(body)
     uid = _html_escape(str(telegram_user_id))
+    model_line = ""
+    if model_name:
+        model_line = f"🎯 <b>Модель</b>: <code>{_html_escape(model_name)}</code>\n"
     return (
-        "🤖 <b>Ответ модели (LLM)</b>\n"
+        "🤖 <b>LLM: запрос и ответ</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔗 <b>Связка</b> · <code>user_id={uid}</code>\n\n"
+        f"🔗 <b>Связка</b> · <code>user_id={uid}</code>\n"
+        f"{model_line}"
+        "\n"
+        "📤 <b>Запрос</b> (текст в API)\n"
+        f"<pre>{req_safe}</pre>\n"
+        "\n"
+        "📥 <b>Ответ</b> (message.content)\n"
         f"<pre>{body_safe}</pre>"
     )
 
@@ -211,10 +235,12 @@ async def log_llm_response(
     *,
     analytics_chat_id: Optional[str],
     telegram_user_id: int,
+    prompt_text: str,
     raw_content: str,
+    model_name: Optional[str] = None,
 ) -> None:
     """
-    Второе сообщение в чат аналитики: полный текст ответа модели (до лимита Telegram).
+    Второе сообщение в чат аналитики: текст запроса к модели и полный ответ (до лимита Telegram).
 
     При отсутствии chat id или ошибке API не бросает наружу.
     """
@@ -222,7 +248,9 @@ async def log_llm_response(
         return
     text = format_llm_response_message(
         telegram_user_id=telegram_user_id,
+        prompt_text=prompt_text,
         raw_content=raw_content,
+        model_name=model_name,
     )
     if len(text) > _TELEGRAM_TEXT_MAX:
         text = text[: _TELEGRAM_TEXT_MAX - 40] + "\n<i>… [обрезано]</i>"

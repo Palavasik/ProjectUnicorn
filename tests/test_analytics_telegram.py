@@ -68,9 +68,14 @@ def test_truncate_for_telegram_log():
 def test_format_llm_response_message():
     text = format_llm_response_message(
         telegram_user_id=99,
+        prompt_text="Старт: 55, 37. Дистанция: 10 км.",
         raw_content='{"routes": []}',
+        model_name="test/model",
     )
-    assert "Ответ модели" in text or "LLM" in text
+    assert "LLM" in text and "запрос" in text.lower()
+    assert "Запрос" in text and "Ответ" in text
     assert "user_id=" in text and "99" in text
     assert "<pre>" in text
     assert "routes" in text
+    assert "55, 37" in text or "Старт" in text
+    assert "test/model" in text

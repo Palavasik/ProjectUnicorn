@@ -73,7 +73,7 @@ def get_routes_from_llm(
     prompt_path: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
-) -> tuple[list[dict], str]:
+) -> tuple[list[dict], str, str]:
     """
     Получить варианты маршрутов от LLM по стартовой точке и дистанции.
 
@@ -86,7 +86,7 @@ def get_routes_from_llm(
         model: Имя модели на OpenRouter (по умолчанию из настроек)
 
     Returns:
-        Кортеж: (список маршрутов, сырая строка ответа модели).
+        Кортеж: (список маршрутов, сырая строка ответа модели, текст запроса в API — промпт после подстановок).
         Маршруты: [{"name": str, "description": str, "coordinates": [[lat, lon], ...]}, ...]
 
     Raises:
@@ -160,4 +160,4 @@ def get_routes_from_llm(
         })
 
     logger.info("LLM вернул %d маршрутов для (%.4f, %.4f)", len(result), lat, lon)
-    return result, content
+    return result, content, prompt_text

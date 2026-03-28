@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import html
 import logging
 import re
 import time
@@ -14,6 +15,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     Update,
 )
+from telegram.error import BadRequest
 from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
@@ -51,8 +53,16 @@ DISTANCE_OPTIONS = [
 ]
 DISTANCE_KM_BY_KEY = {key: km for key, _label, km in DISTANCE_OPTIONS}
 
-# Обратная связь после выбора маршрута: (оценка, подпись кнопки)
+# Сообщение на время запроса к LLM (inline-кнопки дистанции убираются)
+_DISTANCE_LOADING_TEXT = "⏳ Подбираем маршруты…"
+
+# Обратная связь после выдачи списка маршрутов: (оценка, подпись кнопки)
 FEEDBACK_OPTIONS = [(5, "Отлично"), (3, "Норм"), (1, "Не зашло")]
+
+# Значение route_name в БД для отзыва о подборке (без привязки к одному маршруту)
+FEEDBACK_SEARCH_ROUTE_NAME = "Подбор маршрутов"
+# Ожидается ответ на inline «Как вам подбор маршрутов?» после успешного LLM
+FEEDBACK_SEARCH_SESSION_KEY = "feedback_search_session_pending"
 
 # Метрики сессии поиска (лог в ANALYTICS_CHAT_ID)
 JOB_STARTED_AT_KEY = "job_started_at_perf"
@@ -62,9 +72,7 @@ _SEARCH_STATE_KEYS = (
     "search_start_lat",
     "search_start_lon",
     "search_distance",
-    "search_routes",
-    "feedback_route_name",
-    "feedback_distance_km",
+    FEEDBACK_SEARCH_SESSION_KEY,
     JOB_STARTED_AT_KEY,
     SEARCH_START_LABEL_KEY,
 )
@@ -77,7 +85,7 @@ def _pop_search_state_keys(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _get_feedback_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура оценки маршрута (оценка 1–5 и «Пропустить»)."""
+    """Клавиатура оценки подборки маршрутов (оценка и «Пропустить»)."""
     buttons = [
         [InlineKeyboardButton(label, callback_data=f"feedback:{rating}")]
         for rating, label in FEEDBACK_OPTIONS
@@ -140,7 +148,7 @@ def _parse_coords(text: str) -> tuple[float, float] | None:
 
 def _format_llm_routes_message(routes: list[dict]) -> tuple[str, InlineKeyboardMarkup]:
     """
-    Текст сообщения со списком маршрутов от LLM и клавиатура с кнопкой выбора под каждым.
+    Текст сообщения со списком маршрутов от LLM: описание и ссылка на Яндекс.Карты на каждый вариант.
     routes: [{"name", "description", "coordinates"}, ...]
     """
     if not routes:
@@ -151,13 +159,17 @@ def _format_llm_routes_message(routes: list[dict]) -> tuple[str, InlineKeyboardM
         )
     blocks = []
     for i, r in enumerate(routes):
-        blocks.append(f"<b>{i + 1}. {r['name']}</b>\n{r['description']}")
-    text = "Вот варианты маршрутов. Нажмите кнопку под маршрутом, чтобы построить его в Яндекс.Картах.\n\n" + "\n\n".join(blocks)
-    buttons = [
-        [InlineKeyboardButton(f"Построить маршрут {i + 1} в Яндекс.Картах", callback_data=f"route_select:{i}")]
-        for i in range(len(routes))
-    ]
-    return text, InlineKeyboardMarkup(buttons)
+        name = html.escape(str(r["name"]))
+        desc = html.escape(str(r["description"]))
+        url = build_yandex_route_link(r["coordinates"])
+        url_esc = html.escape(url, quote=True)
+        link_line = f'<a href="{url_esc}">Открыть в Яндекс.Картах</a>'
+        blocks.append(f"<b>{i + 1}. {name}</b>\n{desc}\n{link_line}")
+    text = (
+        "Вот варианты маршрутов. Ниже у каждого варианта — ссылка на построение маршрута в Яндекс.Картах.\n\n"
+        + "\n\n".join(blocks)
+    )
+    return text, InlineKeyboardMarkup([])
 
 
 async def find_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -270,16 +282,27 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await query.edit_message_text("Сессия поиска истекла. Нажмите «Найти маршрут» для нового поиска.")
         return ConversationHandler.END
 
+    try:
+        await query.edit_message_text(
+            _DISTANCE_LOADING_TEXT,
+            reply_markup=InlineKeyboardMarkup([]),
+        )
+    except BadRequest as e:
+        # «message is not modified» и др. — всё равно ждём LLM и рисуем результат
+        logger.debug("Не удалось показать загрузку: %s", e)
+
     routes: list[dict] | None = None
     llm_raw: str | None = None
+    llm_prompt: str | None = None
+    result_text = ""
+    reply_markup: InlineKeyboardMarkup = InlineKeyboardMarkup([])
     try:
-        routes, llm_raw = await asyncio.to_thread(
+        routes, llm_raw, llm_prompt = await asyncio.to_thread(
             get_routes_from_llm,
             start_lat,
             start_lon,
             distance,
         )
-        context.user_data["search_routes"] = routes
         result_text, reply_markup = _format_llm_routes_message(routes)
     except LLMRouteServiceError as e:
         result_text = str(e) + "\n\nНажмите «Найти маршрут» для нового поиска."
@@ -318,7 +341,9 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 context.bot,
                 analytics_chat_id=settings.analytics_chat_id,
                 telegram_user_id=user.id,
+                prompt_text=llm_prompt or "",
                 raw_content=llm_raw or "",
+                model_name=settings.openrouter_model,
             )
 
     await query.edit_message_text(
@@ -328,11 +353,18 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         reply_markup=reply_markup,
     )
 
+    if routes is not None:
+        context.user_data[FEEDBACK_SEARCH_SESSION_KEY] = True
+        await query.message.reply_text(
+            "Как вам подбор маршрутов?",
+            reply_markup=_get_feedback_keyboard(),
+        )
+
     context.user_data.pop("search_start_lon", None)
     context.user_data.pop("search_start_lat", None)
     context.user_data.pop(JOB_STARTED_AT_KEY, None)
     context.user_data.pop(SEARCH_START_LABEL_KEY, None)
-    # search_distance не удаляем — понадобится для обратной связи после выбора маршрута
+    # search_distance не удаляем — нужен для insert_feedback после ответа на опрос
 
     return ConversationHandler.END
 
@@ -351,73 +383,37 @@ async def main_button_fallback(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
-async def route_select_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка нажатия «Построить маршрут в Яндекс.Картах» — отправка ссылки по координатам."""
-    query = update.callback_query
-    if not query:
-        return
-    await query.answer()
-
-    if not query.data or not query.data.startswith("route_select:"):
-        return
-
-    try:
-        index = int(query.data.replace("route_select:", "").strip())
-    except ValueError:
-        return
-
-    routes = context.user_data.get("search_routes")
-    if not routes or index < 0 or index >= len(routes):
-        await query.edit_message_text("Сессия истекла. Нажмите «Найти маршрут» для нового поиска.")
-        context.user_data.pop("search_routes", None)
-        return
-
-    route = routes[index]
-    url = build_yandex_route_link(route["coordinates"])
-    await query.edit_message_text(
-        f"<b>{route['name']}</b>\n\n"
-        f"Построить маршрут в Яндекс.Картах:\n<a href=\"{url}\">Открыть маршрут</a>",
-        parse_mode="HTML",
-    )
-    # Сохраняем данные для сбора обратной связи
-    context.user_data["feedback_route_name"] = route["name"]
-    context.user_data["feedback_distance_km"] = context.user_data.get("search_distance")
-    context.user_data.pop("search_routes", None)
-    # Запрос оценки
-    await query.message.reply_text(
-        "Как вам маршрут?",
-        reply_markup=_get_feedback_keyboard(),
-    )
-
-
 async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка нажатия кнопки оценки маршрута или «Пропустить»."""
+    """Обработка оценки подборки маршрутов или «Пропустить»."""
     query = update.callback_query
     if not query or not query.data or not query.data.startswith("feedback:"):
         return
     await query.answer()
 
-    route_name = context.user_data.pop("feedback_route_name", None)
-    distance_km = context.user_data.pop("feedback_distance_km", None)
-    context.user_data.pop("search_distance", None)
-
     suffix = query.data.replace("feedback:", "").strip()
     if suffix == "skip":
+        context.user_data.pop(FEEDBACK_SEARCH_SESSION_KEY, None)
+        context.user_data.pop("search_distance", None)
         await query.edit_message_text("Ок, удачных пробежек!")
         return
 
     try:
         rating = int(suffix)
     except ValueError:
+        context.user_data.pop(FEEDBACK_SEARCH_SESSION_KEY, None)
+        context.user_data.pop("search_distance", None)
         await query.edit_message_text("Спасибо!")
         return
 
+    was_search_feedback = context.user_data.pop(FEEDBACK_SEARCH_SESSION_KEY, None)
+    distance_km = context.user_data.pop("search_distance", None) if was_search_feedback else None
+
     user_id = update.effective_user.id if update.effective_user else None
-    if user_id and route_name:
+    if user_id and was_search_feedback:
         await asyncio.to_thread(
             insert_feedback,
             user_id,
-            route_name,
+            FEEDBACK_SEARCH_ROUTE_NAME,
             rating,
             None,
             distance_km,

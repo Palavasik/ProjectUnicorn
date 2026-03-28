@@ -91,27 +91,23 @@
 
 ---
 
-## 6. Как описание и название попадают в чат Telegram
-
-После успешного вызова список `routes` сохраняется в `context.user_data["search_routes"]`.
+## 6. Как описание, ссылки и названия попадают в чат Telegram
 
 Функция **`_format_llm_routes_message`** формирует:
 
 - Текст в **HTML** (`parse_mode="HTML"`): заголовок сценария, затем для каждого маршрута блок  
-  **`<b>N. {name}</b>`** и перенос строки и **`{description}`** (текст из LLM).
-- Inline-клавиатуру: по одной кнопке на маршрут с `callback_data=f"route_select:{i}"` (индекс `i` в массиве).
+  **`<b>N. {name}</b>`**, описание (`html.escape`), строка-гиперссылка **«Открыть в Яндекс.Картах»** с `href` из [`build_yandex_route_link(route["coordinates"])`](../../src/utils/map_links.py).
+- Inline-клавиатуру под этим сообщением **нет** (пустая разметка).
 
-Если массив маршрутов **пустой**, показывается запасной текст «Маршруты не найдены…» без кнопок построения.
+Если массив маршрутов **пустой**, показывается запасной текст «Маршруты не найдены…».
+
+После успешного ответа LLM (в т.ч. с пустым массивом) отправляется отдельное сообщение с опросом «Как вам подбор маршрутов?» и callback `feedback:*`; в БД пишется с фиксированным `route_name` «Подбор маршрутов».
 
 ---
 
-## 7. Как строится маршрут в Яндекс.Картах
+## 7. Как строится ссылка на Яндекс.Карты
 
-Это **отдельный шаг**, после выдачи списка: пользователь нажимает «Построить маршрут N в Яндекс.Картах».
-
-1. Срабатывает **`route_select_callback`** в `search.py` по шаблону `route_select:`.
-2. По индексу из `callback_data` берётся элемент из `context.user_data["search_routes"]`.
-3. Вызывается [`build_yandex_route_link(route["coordinates"])`](../../src/utils/map_links.py).
+Для каждого маршрута в том же сообщении, что и список, вызывается [`build_yandex_route_link(coordinates)`](../../src/utils/map_links.py).
 
 Логика ссылки:
 
@@ -141,9 +137,8 @@ sequenceDiagram
     OR-->>LLM: content string JSON
     LLM->>LLM: parse JSON, validate routes
     LLM-->>H: routes + raw content string
-    H->>T: edit_message HTML name+description, buttons
-    U->>H: route_select:i
-    H->>T: edit_message + link build_yandex_route_link(coordinates)
+    H->>T: edit_message HTML list+links per route
+    H->>T: reply feedback prompt
 ```
 
 ---
@@ -153,7 +148,7 @@ sequenceDiagram
 При заданной переменной окружения `ANALYTICS_CHAT_ID` после успешного ответа LLM отправляются **два** сообщения в служебный чат (формат **HTML**, `parse_mode=HTML`: пиктограммы, заголовки `<b>`, разделители, `<code>` для id, `<pre>` для сырого JSON):
 
 1. **`log_job_completed`** — сводка: пользователь, стартовая точка, нумерованный список маршрутов, длительность сессии.
-2. **`log_llm_response`** — **полный текст** поля `message.content` из ответа OpenRouter (как пришло от модели, до разбора JSON), в моноширинном блоке. Длинный текст обрезается с пометкой «обрезано», чтобы уложиться в лимит Telegram (4096 символов на сообщение). Пользовательские фрагменты экранируются через `html.escape`.
+2. **`log_llm_response`** — в одном сообщении: **текст запроса** к API (промпт после подстановки `{{lat}}`, `{{lon}}`, `{{distance_km}}`), имя **модели** (`OPENROUTER_MODEL`) и **полный** `message.content` ответа (до разбора JSON). Оба длинных блока в `<pre>`, при необходимости обрезаются с пометкой «обрезано». Экранирование через `html.escape`.
 
 Код: [`src/services/analytics_telegram.py`](../../src/services/analytics_telegram.py), вызов из [`distance_callback`](../../src/handlers/search.py).
 

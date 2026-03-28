@@ -68,7 +68,7 @@
 
 ### Handlers (`src/handlers/`)
 - **commands.py** — `/start`, `/help`
-- **search.py** — `/find`, ConversationHandler (стартовая точка, дистанция → вызов LLM → маршруты с кнопкой «Построить в Яндекс.Картах»), обработчик `route_select` для ссылки на карты, `/cancel`
+- **search.py** — `/find`, ConversationHandler (стартовая точка, дистанция → вызов LLM → маршруты со ссылками в тексте, опрос «Как вам подбор маршрутов?»), `/cancel`
 - **messages.py** — fallback для неизвестных сообщений
 
 ### Services (`src/services/`)
