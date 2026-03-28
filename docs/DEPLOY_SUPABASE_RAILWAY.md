@@ -50,6 +50,8 @@
 | `DATABASE_URL` | Connection string из Supabase → Database (URI с паролем) | **Рекомендуется**: миграции при старте, не нужно вручную запускать SQL |
 | `SUPABASE_URL` | Project URL из Supabase | Нужен, если **не** задаёте `DATABASE_URL` (режим REST) |
 | `SUPABASE_SERVICE_KEY` | Ключ **service_role** из Supabase | Нужен, если **не** задаёте `DATABASE_URL` (режим REST) |
+| `YANDEX_GEOCODER_API_KEY` | Ключ Яндекс.Геокодера | Опционально: лучше распознавание адресов в РФ; без ключа — Nominatim (OSM) |
+| `GEOCODER_USER_AGENT` | Строка для Nominatim, например `MyBot/1.0 (email)` | Опционально; в коде есть разумный дефолт |
 
 4. Сохраните переменные. Railway автоматически выполнит редеплой.
 

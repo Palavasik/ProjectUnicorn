@@ -23,6 +23,7 @@ pip install -r requirements-dev.txt  # если создадите
 ```bash
 cp .env.example .env
 # Отредактируйте .env и добавьте ваш BOT_TOKEN
+# Для ввода адреса старта: GEOCODER_USER_AGENT (Nominatim) и при необходимости YANDEX_GEOCODER_API_KEY — см. .env.example
 ```
 
 ### 3. Запуск в режиме разработки

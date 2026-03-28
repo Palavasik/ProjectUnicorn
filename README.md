@@ -2,7 +2,7 @@
 
 ## Описание
 
-**Project Unicorn** — Telegram-бот для бегунов-любителей. Помогает быстро найти маршруты для бега от вашей точки: по геолокации и выбранной дистанции LLM предлагает варианты маршрутов; по нажатию кнопки открывается построение маршрута в Яндекс.Картах.
+**Project Unicorn** — Telegram-бот для бегунов-любителей. Помогает быстро найти маршруты для бега от вашей точки: старт задаётся геолокацией, координатами или адресом (геокодирование); по выбранной дистанции LLM предлагает варианты маршрутов; по нажатию кнопки открывается построение маршрута в Яндекс.Картах.
 
 *«Найти, где побегать в незнакомом городе — быстро и по своим правилам»*
 
@@ -28,6 +28,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Добавьте BOT_TOKEN и OPENROUTER_API_KEY в .env
 # Промпт для LLM: config/prompts/route_search.txt (или ROUTE_PROMPT_PATH)
+# Адрес старта текстом: по умолчанию Nominatim (задайте GEOCODER_USER_AGENT); для РФ — YANDEX_GEOCODER_API_KEY (см. .env.example)
 ```
 
 ### Запуск (локально)
@@ -46,6 +47,7 @@ python src/main.py
    - `OPENROUTER_API_KEY` — ключ OpenRouter для поиска маршрутов через LLM
    - `WEBHOOK_URL` — публичный URL сервиса (Railway → Settings → Generate Domain; например `https://your-app.up.railway.app`)
    - `SUPABASE_URL` и `SUPABASE_SERVICE_KEY` — для хранения пользователей и обратной связи (см. [Развёртка Supabase + Railway](docs/DEPLOY_SUPABASE_RAILWAY.md))
+   - Опционально: `YANDEX_GEOCODER_API_KEY`, `GEOCODER_USER_AGENT` — геокодирование адреса старта (см. [.env.example](.env.example))
 3. `PORT` и домен Railway задаются автоматически.
 4. Деплой по push в ветку; бот запустится в режиме webhook.
 

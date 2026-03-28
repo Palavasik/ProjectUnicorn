@@ -52,7 +52,7 @@ class Settings:
         self.yandex_geocoder_api_key: Optional[str] = os.getenv("YANDEX_GEOCODER_API_KEY")
         self.geocoder_user_agent: str = os.getenv(
             "GEOCODER_USER_AGENT",
-            "ProjectUnicornBot/1.0 (https://github.com/Palavasik/ProjectUnicorn)",
+            "ProjectUnicornBot/1.0",
         )
 
         # Логи завершения сценария поиска в отдельный Telegram-чат (опционально)
