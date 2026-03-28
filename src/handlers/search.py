@@ -2,6 +2,7 @@
 Обработчики поиска маршрутов для бега.
 """
 
+import asyncio
 import logging
 import re
 
@@ -202,7 +203,12 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return ConversationHandler.END
 
     try:
-        routes = get_routes_from_llm(lat=start_lat, lon=start_lon, distance_km=distance)
+        routes = await asyncio.to_thread(
+            get_routes_from_llm,
+            start_lat,
+            start_lon,
+            distance,
+        )
         context.user_data["search_routes"] = routes
         result_text, reply_markup = _format_llm_routes_message(routes)
     except LLMRouteServiceError as e:
@@ -318,11 +324,13 @@ async def feedback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     user_id = update.effective_user.id if update.effective_user else None
     if user_id and route_name:
-        insert_feedback(
-            telegram_user_id=user_id,
-            route_name=route_name,
-            rating=rating,
-            distance_km=distance_km,
+        await asyncio.to_thread(
+            insert_feedback,
+            user_id,
+            route_name,
+            rating,
+            None,
+            distance_km,
         )
     await query.edit_message_text("Спасибо за отзыв!")
 

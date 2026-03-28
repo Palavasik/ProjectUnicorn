@@ -2,6 +2,8 @@
 Обработчики команд бота.
 """
 
+import asyncio
+
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
@@ -50,12 +52,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         get_start_message(user),
         reply_markup=get_main_keyboard(),
     )
-    # Сохранение/обновление пользователя в Supabase (после ответа, без блокировки)
-    upsert_user(
-        telegram_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name,
+    # Сохранение/обновление пользователя (в thread pool — не блокирует event loop)
+    await asyncio.to_thread(
+        upsert_user,
+        user.id,
+        user.username,
+        user.first_name,
+        user.last_name,
     )
 
 

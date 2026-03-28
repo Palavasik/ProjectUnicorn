@@ -37,8 +37,14 @@ def _extract_json_from_response(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        logger.warning("JSON parse error, trying raw text: %s", e)
-        return json.loads(text)
+        logger.warning("JSON parse error, trying substring between braces: %s", e)
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                return json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                pass
+        raise
 
 
 def _validate_route(route: dict, index: int) -> None:
