@@ -5,12 +5,19 @@
 import pytest
 
 from services.analytics_telegram import (
+    format_distance_km_ru,
     format_duration_ru,
     format_job_completed_message,
     format_llm_latency,
     format_llm_response_message,
     truncate_for_telegram_log,
 )
+
+
+def test_format_distance_km_ru():
+    assert format_distance_km_ru(10.0) == "10 км"
+    assert format_distance_km_ru(4) == "4 км"
+    assert format_distance_km_ru(4.5) == "4.5 км"
 
 
 def test_format_duration_ru_seconds_only():
@@ -32,12 +39,14 @@ def test_format_job_completed_message_full():
         start_label="геолокация: 55.755800, 37.617300",
         route_names=["Набережная", "Парк"],
         duration_seconds=90.0,
+        requested_distance_km=10.0,
     )
     assert "JOB" in text and "завершён" in text
     assert "<code>42</code>" in text
     assert "@runner" in text
     assert "Иван" in text and "Петров" in text
     assert "геолокация" in text
+    assert "Дистанция" in text and "10 км" in text
     assert "Набережная" in text and "Парк" in text
     assert "1 мин 30 с" in text
 

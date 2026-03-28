@@ -23,6 +23,23 @@ def _html_escape(text: str) -> str:
     return html.escape(text, quote=False)
 
 
+def format_distance_km_ru(km: float) -> str:
+    """
+    Дистанция для лога (км), без лишних дробных знаков.
+
+    Args:
+        km: Дистанция в километрах.
+
+    Returns:
+        Строка вида «10 км» или «4.5 км».
+    """
+    if km < 0:
+        km = 0.0
+    if abs(km - round(km)) < 1e-6:
+        return f"{int(round(km))} км"
+    return f"{km:.1f} км"
+
+
 def format_duration_ru(seconds: float) -> str:
     """
     Человекочитаемая длительность на русском (минуты и секунды).
@@ -53,6 +70,7 @@ def format_job_completed_message(
     start_label: str,
     route_names: list[str],
     duration_seconds: Optional[float],
+    requested_distance_km: Optional[float] = None,
 ) -> str:
     """
     Текст сообщения в чат аналитики (HTML + пиктограммы для parse_mode=HTML).
@@ -65,6 +83,7 @@ def format_job_completed_message(
         start_label: Описание стартовой точки (геолокация или ввод).
         route_names: Названия маршрутов из ответа LLM.
         duration_seconds: Длительность сессии в секундах или None, если старт не зафиксирован.
+        requested_distance_km: Дистанция, выбранная пользователем на шаге поиска (км), опционально.
 
     Returns:
         Готовый текст для send_message с parse_mode=\"HTML\".
@@ -93,8 +112,18 @@ def format_job_completed_message(
         "📍 <b>Стартовая точка</b>",
         f"   {start_safe}",
         "",
-        "🛤 <b>Маршруты</b>",
+        "📏 <b>Дистанция (запрос)</b>",
     ]
+    if requested_distance_km is not None:
+        lines.append(f"   {_html_escape(format_distance_km_ru(requested_distance_km))}")
+    else:
+        lines.append("   <i>не указана</i>")
+    lines.extend(
+        [
+            "",
+            "🛤 <b>Маршруты</b>",
+        ]
+    )
     if route_names:
         for i, name in enumerate(route_names, 1):
             lines.append(f"   {i}. {_html_escape(name)}")
@@ -221,6 +250,7 @@ async def log_job_completed(
     start_label: str,
     route_names: list[str],
     duration_seconds: Optional[float],
+    requested_distance_km: Optional[float] = None,
 ) -> None:
     """
     Отправляет лог в чат аналитики. При отсутствии chat id или ошибке API не бросает наружу.
@@ -240,6 +270,7 @@ async def log_job_completed(
         start_label=start_label,
         route_names=route_names,
         duration_seconds=duration_seconds,
+        requested_distance_km=requested_distance_km,
     )
     chat_id = _parse_chat_id(analytics_chat_id)
     try:

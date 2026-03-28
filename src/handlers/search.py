@@ -354,6 +354,7 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 start_label=start_label,
                 route_names=route_names,
                 duration_seconds=duration_sec,
+                requested_distance_km=distance,
             )
             await log_llm_response(
                 context.bot,
