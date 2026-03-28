@@ -125,12 +125,28 @@ def truncate_for_telegram_log(text: str, max_len: int = _TELEGRAM_TEXT_MAX - 200
     return text[: max(0, max_len - 40)] + "\n… [обрезано]"
 
 
+def format_llm_latency(seconds: float) -> str:
+    """
+    Краткая строка длительности вызова LLM для лога (секунды с дробной частью).
+
+    Args:
+        seconds: Неотрицательное время в секундах.
+
+    Returns:
+        Строка вида «1.24 с».
+    """
+    if seconds < 0:
+        seconds = 0.0
+    return f"{seconds:.2f} с"
+
+
 def format_llm_response_message(
     *,
     telegram_user_id: int,
     prompt_text: str,
     raw_content: str,
     model_name: Optional[str] = None,
+    llm_duration_seconds: Optional[float] = None,
 ) -> str:
     """
     Текст второго сообщения в аналитику: запрос и сырой ответ LLM (HTML + два блока pre).
@@ -140,6 +156,7 @@ def format_llm_response_message(
         prompt_text: Полный текст user-сообщения, отправленного в Chat Completions.
         raw_content: Полное содержимое message.content от API.
         model_name: Имя модели OpenRouter (опционально).
+        llm_duration_seconds: Время от запроса до получения ответа от API (секунды), опционально.
 
     Returns:
         Текст для send_message с parse_mode=\"HTML\".
@@ -160,11 +177,17 @@ def format_llm_response_message(
     model_line = ""
     if model_name:
         model_line = f"🎯 <b>Модель</b>: <code>{_html_escape(model_name)}</code>\n"
+    latency_line = ""
+    if llm_duration_seconds is not None:
+        latency_line = (
+            f"⏱ <b>Время ответа LLM</b>: {_html_escape(format_llm_latency(llm_duration_seconds))}\n"
+        )
     return (
         "🤖 <b>LLM: запрос и ответ</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"🔗 <b>Связка</b> · <code>user_id={uid}</code>\n"
         f"{model_line}"
+        f"{latency_line}"
         "\n"
         "📤 <b>Запрос</b> (текст в API)\n"
         f"<pre>{req_safe}</pre>\n"
@@ -238,6 +261,7 @@ async def log_llm_response(
     prompt_text: str,
     raw_content: str,
     model_name: Optional[str] = None,
+    llm_duration_seconds: Optional[float] = None,
 ) -> None:
     """
     Второе сообщение в чат аналитики: текст запроса к модели и полный ответ (до лимита Telegram).
@@ -251,6 +275,7 @@ async def log_llm_response(
         prompt_text=prompt_text,
         raw_content=raw_content,
         model_name=model_name,
+        llm_duration_seconds=llm_duration_seconds,
     )
     if len(text) > _TELEGRAM_TEXT_MAX:
         text = text[: _TELEGRAM_TEXT_MAX - 40] + "\n<i>… [обрезано]</i>"

@@ -84,6 +84,19 @@ def _pop_search_state_keys(context: ContextTypes.DEFAULT_TYPE) -> None:
         context.user_data.pop(key, None)
 
 
+async def _restore_main_keyboard(message) -> None:
+    """
+    Восстанавливает постоянную reply-клавиатуру главного меню (шаг 0).
+
+    После шага «локация» у пользователя остаётся клавиатура геолокации; без этого
+    следующие сообщения с inline-кнопками её не сменят.
+    """
+    try:
+        await message.reply_text("\u200b", reply_markup=get_main_keyboard())
+    except Exception:
+        logger.exception("Не удалось восстановить главное меню")
+
+
 def _get_feedback_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура оценки подборки маршрутов (оценка и «Пропустить»)."""
     buttons = [
@@ -272,6 +285,7 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     distance = DISTANCE_KM_BY_KEY.get(key)
     if distance is None:
         await query.edit_message_text("Неизвестный вариант дистанции. Нажмите «Найти маршрут» для нового поиска.")
+        await _restore_main_keyboard(query.message)
         return ConversationHandler.END
 
     context.user_data["search_distance"] = distance
@@ -280,6 +294,7 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if start_lon is None or start_lat is None:
         await query.edit_message_text("Сессия поиска истекла. Нажмите «Найти маршрут» для нового поиска.")
+        await _restore_main_keyboard(query.message)
         return ConversationHandler.END
 
     try:
@@ -294,15 +309,18 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     routes: list[dict] | None = None
     llm_raw: str | None = None
     llm_prompt: str | None = None
+    llm_duration_sec: float | None = None
     result_text = ""
     reply_markup: InlineKeyboardMarkup = InlineKeyboardMarkup([])
     try:
+        _llm_t0 = time.perf_counter()
         routes, llm_raw, llm_prompt = await asyncio.to_thread(
             get_routes_from_llm,
             start_lat,
             start_lon,
             distance,
         )
+        llm_duration_sec = time.perf_counter() - _llm_t0
         result_text, reply_markup = _format_llm_routes_message(routes)
     except LLMRouteServiceError as e:
         result_text = str(e) + "\n\nНажмите «Найти маршрут» для нового поиска."
@@ -344,6 +362,7 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 prompt_text=llm_prompt or "",
                 raw_content=llm_raw or "",
                 model_name=settings.openrouter_model,
+                llm_duration_seconds=llm_duration_sec,
             )
 
     await query.edit_message_text(
@@ -366,13 +385,17 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data.pop(SEARCH_START_LABEL_KEY, None)
     # search_distance не удаляем — нужен для insert_feedback после ответа на опрос
 
+    await _restore_main_keyboard(query.message)
     return ConversationHandler.END
 
 
 async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отмена текущего диалога поиска."""
     _pop_search_state_keys(context)
-    await update.message.reply_text("Поиск отменён. Нажмите «Найти маршрут» для нового поиска.")
+    await update.message.reply_text(
+        "Поиск отменён. Нажмите «Найти маршрут» для нового поиска.",
+        reply_markup=get_main_keyboard(),
+    )
     return ConversationHandler.END
 
 

@@ -7,6 +7,7 @@ import pytest
 from services.analytics_telegram import (
     format_duration_ru,
     format_job_completed_message,
+    format_llm_latency,
     format_llm_response_message,
     truncate_for_telegram_log,
 )
@@ -65,15 +66,23 @@ def test_truncate_for_telegram_log():
     assert "обрезано" in out
 
 
+def test_format_llm_latency():
+    assert format_llm_latency(1.234) == "1.23 с"
+    assert format_llm_latency(0) == "0.00 с"
+
+
 def test_format_llm_response_message():
     text = format_llm_response_message(
         telegram_user_id=99,
         prompt_text="Старт: 55, 37. Дистанция: 10 км.",
         raw_content='{"routes": []}',
         model_name="test/model",
+        llm_duration_seconds=2.5,
     )
     assert "LLM" in text and "запрос" in text.lower()
     assert "Запрос" in text and "Ответ" in text
+    assert "Время ответа LLM" in text
+    assert "2.50 с" in text
     assert "user_id=" in text and "99" in text
     assert "<pre>" in text
     assert "routes" in text
