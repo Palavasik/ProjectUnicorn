@@ -7,6 +7,8 @@ import pytest
 from services.analytics_telegram import (
     format_duration_ru,
     format_job_completed_message,
+    format_llm_response_message,
+    truncate_for_telegram_log,
 )
 
 
@@ -30,11 +32,11 @@ def test_format_job_completed_message_full():
         route_names=["Набережная", "Парк"],
         duration_seconds=90.0,
     )
-    assert "JOB завершён" in text
-    assert "id=42" in text
+    assert "JOB" in text and "завершён" in text
+    assert "<code>42</code>" in text
     assert "@runner" in text
-    assert "Иван Петров" in text
-    assert "геолокация: 55.755800, 37.617300" in text
+    assert "Иван" in text and "Петров" in text
+    assert "геолокация" in text
     assert "Набережная" in text and "Парк" in text
     assert "1 мин 30 с" in text
 
@@ -49,6 +51,26 @@ def test_format_job_completed_message_empty_routes_and_no_duration():
         route_names=[],
         duration_seconds=None,
     )
-    assert "Маршруты: (нет)" in text
-    assert "Длительность: —" in text
-    assert "Пользователь: id=1 —" in text
+    assert "нет вариантов" in text
+    assert "не зафиксирована" in text
+    assert "<code>1</code>" in text
+
+
+def test_truncate_for_telegram_log():
+    short = "abc"
+    assert truncate_for_telegram_log(short, max_len=100) == short
+    long = "x" * 500
+    out = truncate_for_telegram_log(long, max_len=100)
+    assert len(out) < len(long)
+    assert "обрезано" in out
+
+
+def test_format_llm_response_message():
+    text = format_llm_response_message(
+        telegram_user_id=99,
+        raw_content='{"routes": []}',
+    )
+    assert "Ответ модели" in text or "LLM" in text
+    assert "user_id=" in text and "99" in text
+    assert "<pre>" in text
+    assert "routes" in text

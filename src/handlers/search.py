@@ -32,7 +32,7 @@ from handlers.commands import (
     get_start_message,
     start_handler,
 )
-from services.analytics_telegram import log_job_completed
+from services.analytics_telegram import log_job_completed, log_llm_response
 from services.geocode_service import GeocodeUnavailableError, geocode_to_lat_lon
 from services.llm_route_service import LLMRouteServiceError, get_routes_from_llm
 from services.supabase_client import insert_feedback
@@ -271,8 +271,9 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return ConversationHandler.END
 
     routes: list[dict] | None = None
+    llm_raw: str | None = None
     try:
-        routes = await asyncio.to_thread(
+        routes, llm_raw = await asyncio.to_thread(
             get_routes_from_llm,
             start_lat,
             start_lon,
@@ -312,6 +313,12 @@ async def distance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 start_label=start_label,
                 route_names=route_names,
                 duration_seconds=duration_sec,
+            )
+            await log_llm_response(
+                context.bot,
+                analytics_chat_id=settings.analytics_chat_id,
+                telegram_user_id=user.id,
+                raw_content=llm_raw or "",
             )
 
     await query.edit_message_text(

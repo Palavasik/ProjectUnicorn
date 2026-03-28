@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from typing import TYPE_CHECKING, Optional
 
@@ -12,6 +13,14 @@ if TYPE_CHECKING:
     from telegram import Bot
 
 logger = logging.getLogger(__name__)
+
+# Лимит Telegram на длину одного текстового сообщения
+_TELEGRAM_TEXT_MAX = 4096
+
+
+def _html_escape(text: str) -> str:
+    """Экранирование для Telegram HTML (parse_mode=HTML)."""
+    return html.escape(text, quote=False)
 
 
 def format_duration_ru(seconds: float) -> str:
@@ -46,7 +55,7 @@ def format_job_completed_message(
     duration_seconds: Optional[float],
 ) -> str:
     """
-    Текст сообщения в чат аналитики (plain text).
+    Текст сообщения в чат аналитики (HTML + пиктограммы для parse_mode=HTML).
 
     Args:
         telegram_user_id: Числовой id пользователя Telegram.
@@ -58,7 +67,7 @@ def format_job_completed_message(
         duration_seconds: Длительность сессии в секундах или None, если старт не зафиксирован.
 
     Returns:
-        Готовый текст для send_message.
+        Готовый текст для send_message с parse_mode=\"HTML\".
     """
     parts_name = []
     if first_name:
@@ -66,23 +75,79 @@ def format_job_completed_message(
     if last_name:
         parts_name.append(last_name)
     display_name = " ".join(parts_name) if parts_name else "—"
-    uname = f"@{username}" if username else "—"
+    uname_line = f"@{_html_escape(username)}" if username else "—"
 
-    lines = [
-        "JOB завершён",
-        f"Пользователь: id={telegram_user_id} {uname} ({display_name})",
-        f"Старт: {start_label}",
+    uid = _html_escape(str(telegram_user_id))
+    disp = _html_escape(display_name)
+    start_safe = _html_escape(start_label.strip() or "—")
+
+    lines: list[str] = [
+        "✅ <b>JOB завершён</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "👤 <b>Пользователь</b>",
+        f"   • ID: <code>{uid}</code>",
+        f"   • Username: {uname_line}",
+        f"   • Имя: {disp}",
+        "",
+        "📍 <b>Стартовая точка</b>",
+        f"   {start_safe}",
+        "",
+        "🛤 <b>Маршруты</b>",
     ]
     if route_names:
-        lines.append("Маршруты: " + ", ".join(route_names))
+        for i, name in enumerate(route_names, 1):
+            lines.append(f"   {i}. {_html_escape(name)}")
     else:
-        lines.append("Маршруты: (нет)")
+        lines.append("   <i>нет вариантов</i>")
+    lines.extend(["", "⏱ <b>Длительность сессии</b>"])
     if duration_seconds is not None:
-        lines.append(f"Длительность: {format_duration_ru(duration_seconds)}")
+        lines.append(f"   {_html_escape(format_duration_ru(duration_seconds))}")
     else:
-        lines.append("Длительность: —")
+        lines.append("   <i>не зафиксирована</i>")
 
     return "\n".join(lines)
+
+
+def truncate_for_telegram_log(text: str, max_len: int = _TELEGRAM_TEXT_MAX - 200) -> str:
+    """
+    Укоротить текст для одного сообщения Telegram (запас под заголовок).
+
+    Args:
+        text: Исходный текст.
+        max_len: Максимальная длина тела (символов).
+
+    Returns:
+        Исходная строка или обрезанная с пометкой.
+    """
+    if len(text) <= max_len:
+        return text
+    return text[: max(0, max_len - 40)] + "\n… [обрезано]"
+
+
+def format_llm_response_message(*, telegram_user_id: int, raw_content: str) -> str:
+    """
+    Текст второго сообщения в аналитику: сырой ответ LLM (HTML + моноширинный блок).
+
+    Args:
+        telegram_user_id: id пользователя (связка с первым сообщением).
+        raw_content: Полное содержимое message.content от API.
+
+    Returns:
+        Текст для send_message с parse_mode=\"HTML\".
+    """
+    body = truncate_for_telegram_log(
+        raw_content.strip() or "—",
+        max_len=_TELEGRAM_TEXT_MAX - 350,
+    )
+    body_safe = _html_escape(body)
+    uid = _html_escape(str(telegram_user_id))
+    return (
+        "🤖 <b>Ответ модели (LLM)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔗 <b>Связка</b> · <code>user_id={uid}</code>\n\n"
+        f"<pre>{body_safe}</pre>"
+    )
 
 
 def _parse_chat_id(raw: str) -> int | str:
@@ -134,7 +199,40 @@ async def log_job_completed(
         await bot.send_message(
             chat_id=chat_id,
             text=text,
+            parse_mode="HTML",
             disable_notification=True,
         )
     except Exception:
         logger.exception("Не удалось отправить лог аналитики в чат %s", analytics_chat_id)
+
+
+async def log_llm_response(
+    bot: Bot,
+    *,
+    analytics_chat_id: Optional[str],
+    telegram_user_id: int,
+    raw_content: str,
+) -> None:
+    """
+    Второе сообщение в чат аналитики: полный текст ответа модели (до лимита Telegram).
+
+    При отсутствии chat id или ошибке API не бросает наружу.
+    """
+    if not analytics_chat_id:
+        return
+    text = format_llm_response_message(
+        telegram_user_id=telegram_user_id,
+        raw_content=raw_content,
+    )
+    if len(text) > _TELEGRAM_TEXT_MAX:
+        text = text[: _TELEGRAM_TEXT_MAX - 40] + "\n<i>… [обрезано]</i>"
+    chat_id = _parse_chat_id(analytics_chat_id)
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="HTML",
+            disable_notification=True,
+        )
+    except Exception:
+        logger.exception("Не удалось отправить ответ LLM в чат аналитики %s", analytics_chat_id)
